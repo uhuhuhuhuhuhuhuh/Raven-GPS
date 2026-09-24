@@ -48,6 +48,8 @@ export interface RavenNativePlugin {
   /** Spotify refuses generic MediaBrowser clients, so it goes through App Remote instead. */
   spotifyBrowse(options: { clientId: string; parentId?: string }): Promise<{ items: MediaBrowseItem[] }>;
   spotifyPlay(options: { clientId: string; id: string }): Promise<void>;
+  /** One-time consent flow; App Remote refuses to connect until this has been completed. */
+  spotifyAuthorize(options: { clientId: string }): Promise<void>;
   installedApps(options: { packages: string[] }): Promise<{ installed: string[] }>;
   launchApp(options: { package: string; web?: string }): Promise<{ launched: boolean }>;
   /** Installed app version, for the in-app updater. */
@@ -110,6 +112,8 @@ class RavenNativeWeb extends WebPlugin implements RavenNativePlugin {
   }
 
   async spotifyPlay(): Promise<void> {}
+
+  async spotifyAuthorize(): Promise<void> {}
 
   async installedApps() {
     return { installed: [] };

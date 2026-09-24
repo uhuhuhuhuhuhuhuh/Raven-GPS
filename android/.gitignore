@@ -6,6 +6,7 @@
 # Vendored on purpose: Spotify doesn't publish App Remote to Maven, so the build needs
 # this .aar in the repo (see android/app/build.gradle).
 !app/libs/spotify-app-remote-release-0.8.0.aar
+!app/libs/spotify-auth-release-2.1.0.aar
 *.ap_
 *.aab
 

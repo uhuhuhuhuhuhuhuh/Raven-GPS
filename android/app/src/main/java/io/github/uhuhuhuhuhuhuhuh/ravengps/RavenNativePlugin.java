@@ -28,6 +28,7 @@ import android.speech.tts.UtteranceProgressListener;
 import android.util.Base64;
 import android.view.KeyEvent;
 import android.view.WindowManager;
+import androidx.activity.result.ActivityResult;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.FileProvider;
 import com.getcapacitor.JSArray;
@@ -35,7 +36,11 @@ import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.spotify.sdk.android.auth.AuthorizationClient;
+import com.spotify.sdk.android.auth.AuthorizationRequest;
+import com.spotify.sdk.android.auth.AuthorizationResponse;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -646,6 +651,41 @@ public class RavenNativePlugin extends Plugin {
         // context it can't show it and fails with "Explicit user authorization is required".
         if (spotify == null) spotify = new SpotifyRemote(getActivity() != null ? getActivity() : getContext());
         return spotify;
+    }
+
+    /**
+     * Runs Spotify's consent flow. App Remote refuses with "explicit user authorization is
+     * required" until this has been completed once; its own showAuthView doesn't present it.
+     */
+    @PluginMethod
+    public void spotifyAuthorize(PluginCall call) {
+        String clientId = call.getString("clientId", "");
+        if (clientId == null || clientId.isEmpty()) {
+            call.reject("No Spotify client ID is configured.");
+            return;
+        }
+        if (getActivity() == null) {
+            call.reject("Can't show the Spotify sign-in right now.");
+            return;
+        }
+        AuthorizationRequest request = new AuthorizationRequest
+            .Builder(clientId, AuthorizationResponse.Type.TOKEN, SpotifyRemote.REDIRECT_URI)
+            .setScopes(new String[] { "app-remote-control" })
+            .build();
+        startActivityForResult(call, AuthorizationClient.createLoginActivityIntent(getActivity(), request), "spotifyAuthResult");
+    }
+
+    @ActivityCallback
+    private void spotifyAuthResult(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        AuthorizationResponse response = AuthorizationClient.getResponse(result.getResultCode(), result.getData());
+        if (response.getType() == AuthorizationResponse.Type.TOKEN) {
+            call.resolve();
+            return;
+        }
+        String error = response.getError();
+        if (response.getType() == AuthorizationResponse.Type.ERROR && error != null && !error.isEmpty()) call.reject(error);
+        else call.reject("Spotify sign-in was cancelled.");
     }
 
     @PluginMethod

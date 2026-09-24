@@ -66,6 +66,9 @@ dependencies {
     // Needed because Spotify's MediaBrowserService refuses to serve a library to callers it
     // hasn't allow-listed, which is every app that isn't Android Auto or a named partner.
     implementation(name: 'spotify-app-remote-release-0.8.0', ext: 'aar')
+    // Auth library: App Remote only reports "explicit user authorization is required"; the
+    // consent flow itself lives here and has to be run once before it will connect.
+    implementation(name: 'spotify-auth-release-2.1.0', ext: 'aar')
     implementation "com.google.code.gson:gson:2.10.1"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"

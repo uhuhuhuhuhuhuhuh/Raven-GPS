@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { CONNECTORS, SPOTIFY_CLIENT_ID, SPOTIFY_PACKAGE } from './media';
 import { RavenNative, isNative, type MediaAction, type MediaBrowseItem, type NowPlaying } from './native';
 
+const needsAuthorization = (problem: unknown) =>
+  problem instanceof Error && /authoriz/i.test(problem.message);
+
 /** Media connector state: access, installed players and what's playing now. */
 export function useMedia() {
   const native = isNative();
@@ -47,7 +50,15 @@ export function useMedia() {
   const browse = useCallback(async (packageName: string, parentId?: string): Promise<MediaBrowseItem[]> => {
     if (!native) return [];
     if (packageName === SPOTIFY_PACKAGE) {
-      return (await RavenNative.spotifyBrowse({ clientId: SPOTIFY_CLIENT_ID, parentId })).items;
+      try {
+        return (await RavenNative.spotifyBrowse({ clientId: SPOTIFY_CLIENT_ID, parentId })).items;
+      } catch (problem) {
+        // App Remote won't connect until the user has approved Raven GPS once. Run Spotify's
+        // consent flow on the first refusal, then try the same request again.
+        if (!needsAuthorization(problem)) throw problem;
+        await RavenNative.spotifyAuthorize({ clientId: SPOTIFY_CLIENT_ID });
+        return (await RavenNative.spotifyBrowse({ clientId: SPOTIFY_CLIENT_ID, parentId })).items;
+      }
     }
     return (await RavenNative.mediaBrowse({ package: packageName, parentId })).items;
   }, [native]);
