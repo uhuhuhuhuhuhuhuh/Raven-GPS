@@ -55,13 +55,10 @@ jobs:
       - name: Build web app and sync it into the Android project
         run: npm run build && npx cap sync android
 
-      # Without a release key, APKs are signed with a debug key. Reusing the same one keeps
-      # each new build installable over the last (Android rejects a changed signature).
-      - name: Restore debug signing key
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: raven-gps-debug-keystore-v1
+      # Without a release key, APKs are signed with android/app/preview.keystore, which is
+      # committed so every build keeps the same signature and installs over the last. (A
+      # cached ~/.android/debug.keystore used to do this job and didn't survive between runs,
+      # so each build got a fresh key and Android refused the update.)
       - name: Use release signing key (optional repository secrets)
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

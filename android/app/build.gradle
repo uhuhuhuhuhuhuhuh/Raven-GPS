@@ -18,8 +18,7 @@ android {
         }
     }
     signingConfigs {
-        // Release signing key from CI secrets; without them the release APK is signed with
-        // the debug key (fine for sideloading).
+        // Release signing key from CI secrets; without them the preview key below is used.
         release {
             def keystore = System.getenv("RAVEN_KEYSTORE")
             if (keystore) {
@@ -29,10 +28,21 @@ android {
                 keyPassword System.getenv("RAVEN_KEY_PASSWORD")
             }
         }
+        // Fixed key, committed on purpose, for preview/sideload builds. Gradle's debug key is
+        // generated per machine, so every CI build came out with a different signature and
+        // Android refused to install one build over the last ("signatures do not match"),
+        // which also broke the in-app updater. This key is not a secret: it only has to be
+        // stable. Real releases still come from the secrets above.
+        preview {
+            storeFile file("preview.keystore")
+            storePassword "ravenpreview"
+            keyAlias "ravenpreview"
+            keyPassword "ravenpreview"
+        }
     }
     buildTypes {
         release {
-            signingConfig System.getenv("RAVEN_KEYSTORE") ? signingConfigs.release : signingConfigs.debug
+            signingConfig System.getenv("RAVEN_KEYSTORE") ? signingConfigs.release : signingConfigs.preview
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

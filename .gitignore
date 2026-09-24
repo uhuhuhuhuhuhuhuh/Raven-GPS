@@ -5,4 +5,7 @@ test-results/
 coverage/
 *.keystore
 *.jks
+# Deliberately tracked: the fixed key preview/sideload builds are signed with, so each
+# build installs over the last. Not secret, and never used for a Play Store release.
+!android/app/preview.keystore
 playwright.local.config.ts
