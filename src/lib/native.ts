@@ -50,7 +50,8 @@ export interface RavenNativePlugin {
   spotifyPlay(options: { clientId: string; id: string }): Promise<void>;
   /** One-time consent flow; App Remote refuses to connect until this has been completed. */
   spotifyAuthorize(options: { clientId: string }): Promise<void>;
-  installedApps(options: { packages: string[] }): Promise<{ installed: string[] }>;
+  /** Which of these are installed, plus each one's launcher icon as a data URL. */
+  installedApps(options: { packages: string[] }): Promise<{ installed: string[]; icons: Record<string, string> }>;
   launchApp(options: { package: string; web?: string }): Promise<{ launched: boolean }>;
   /** Installed app version, for the in-app updater. */
   appInfo(): Promise<{ versionCode: number; versionName: string }>;
@@ -116,7 +117,7 @@ class RavenNativeWeb extends WebPlugin implements RavenNativePlugin {
   async spotifyAuthorize(): Promise<void> {}
 
   async installedApps() {
-    return { installed: [] };
+    return { installed: [], icons: {} };
   }
 
   async launchApp(options: { package: string; web?: string }) {

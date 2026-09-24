@@ -7,6 +7,8 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.Drawable;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
@@ -432,14 +434,37 @@ public class RavenNativePlugin extends Plugin {
     public void installedApps(PluginCall call) {
         JSArray requested = call.getArray("packages", new JSArray());
         JSArray installed = new JSArray();
+        JSObject icons = new JSObject();
         PackageManager manager = getContext().getPackageManager();
         for (int index = 0; index < requested.length(); index++) {
             String packageName = requested.optString(index, "");
-            if (!packageName.isEmpty() && manager.getLaunchIntentForPackage(packageName) != null) installed.put(packageName);
+            if (packageName.isEmpty() || manager.getLaunchIntentForPackage(packageName) == null) continue;
+            installed.put(packageName);
+            String icon = appIcon(packageName);
+            if (icon != null) icons.put(packageName, icon);
         }
         JSObject result = new JSObject();
         result.put("installed", installed);
+        result.put("icons", icons);
         call.resolve(result);
+    }
+
+    /** The app's real launcher icon as a PNG data URL, so the picker can show it. */
+    private String appIcon(String packageName) {
+        try {
+            Drawable drawable = getContext().getPackageManager().getApplicationIcon(packageName);
+            int size = 96;
+            Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+            // Draw rather than cast: modern icons are adaptive and have no single bitmap.
+            drawable.setBounds(0, 0, size, size);
+            drawable.draw(canvas);
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, output);
+            return "data:image/png;base64," + Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP);
+        } catch (PackageManager.NameNotFoundException | RuntimeException error) {
+            return null;
+        }
     }
 
     @PluginMethod

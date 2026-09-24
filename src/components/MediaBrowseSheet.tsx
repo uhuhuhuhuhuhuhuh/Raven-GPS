@@ -78,7 +78,9 @@ export function MediaBrowseSheet({ connector, browse, play, onOpenApp, onClose }
             <li key={item.id || `${item.title}-${index}`}>
               <button className="browse-item" onClick={() => void onItem(item)} disabled={playing === item.id}>
                 <span className="browse-icon" style={{ borderColor: connector.color }}>
-                  {item.playable && !item.browsable ? <Music size={18} aria-hidden /> : <ListMusic size={18} aria-hidden />}
+                  {item.icon
+                    ? <img src={item.icon} alt="" />
+                    : item.playable && !item.browsable ? <Music size={18} aria-hidden /> : <ListMusic size={18} aria-hidden />}
                 </span>
                 <span className="browse-labels">
                   <strong>{item.title || 'Untitled'}</strong>

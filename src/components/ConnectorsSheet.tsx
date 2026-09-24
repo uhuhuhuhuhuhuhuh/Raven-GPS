@@ -6,6 +6,7 @@ type Props = {
   native: boolean;
   granted: boolean;
   installed: string[];
+  appIcons: Record<string, string>;
   preferred: string | null;
   onGrant: () => void;
   onLaunch: (packageName: string, web: string) => void;
@@ -14,7 +15,7 @@ type Props = {
   onClose: () => void;
 };
 
-export function ConnectorsSheet({ native, granted, installed, preferred, onGrant, onLaunch, onBrowse, onPrefer, onClose }: Props) {
+export function ConnectorsSheet({ native, granted, installed, appIcons, preferred, onGrant, onLaunch, onBrowse, onPrefer, onClose }: Props) {
   const sorted = [...CONNECTORS].sort((a, b) => Number(installed.includes(b.package)) - Number(installed.includes(a.package)));
   return (
     <Sheet title="Music & audio" onClose={onClose} className="connectors-sheet">
@@ -42,7 +43,9 @@ export function ConnectorsSheet({ native, granted, installed, preferred, onGrant
                 className={`connector${preferred === connector.package ? ' preferred' : ''}`}
                 onClick={() => { onPrefer(connector.package); if (canBrowse) onBrowse(connector); else onLaunch(connector.package, connector.web); }}
               >
-                <span className="connector-badge" style={{ background: connector.color }}>{connector.name[0]}</span>
+                <span className={`connector-badge${appIcons[connector.package] ? ' has-icon' : ''}`} style={appIcons[connector.package] ? undefined : { background: connector.color }}>
+                  {appIcons[connector.package] ? <img src={appIcons[connector.package]} alt="" /> : connector.name[0]}
+                </span>
                 <span className="connector-name">{connector.name}</span>
                 {native && <small>{canBrowse ? <><ListMusic size={12} /> Browse</> : isInstalled ? 'Open' : 'Get app'}</small>}
                 {preferred === connector.package && <Check size={14} className="connector-check" aria-label="Default" />}

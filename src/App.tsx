@@ -612,6 +612,7 @@ export default function App() {
           native={media.native}
           granted={media.granted}
           installed={media.installed}
+          appIcons={media.appIcons}
           preferred={settings.mediaApp}
           onGrant={media.grant}
           onLaunch={media.launch}

@@ -11,6 +11,7 @@ export function useMedia() {
   const [granted, setGranted] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
   const [installed, setInstalled] = useState<string[]>([]);
+  const [appIcons, setAppIcons] = useState<Record<string, string>>({});
 
   const refresh = useCallback(async () => {
     if (!native) return;
@@ -18,7 +19,9 @@ export function useMedia() {
       const access = await RavenNative.mediaAccess();
       setGranted(access.granted);
       if (access.granted) setNowPlaying((await RavenNative.nowPlaying()).playing ?? null);
-      setInstalled((await RavenNative.installedApps({ packages: CONNECTORS.map(connector => connector.package) })).installed);
+      const apps = await RavenNative.installedApps({ packages: CONNECTORS.map(connector => connector.package) });
+      setInstalled(apps.installed);
+      setAppIcons(apps.icons ?? {});
     } catch {
       // plugin unavailable: the bar stays in its "connect" state
     }
@@ -73,5 +76,5 @@ export function useMedia() {
     void RavenNative.openMediaAccessSettings().catch(() => undefined);
   }, []);
 
-  return { native, granted, nowPlaying, installed, control, launch, browse, play, grant, refresh };
+  return { native, granted, nowPlaying, installed, appIcons, control, launch, browse, play, grant, refresh };
 }

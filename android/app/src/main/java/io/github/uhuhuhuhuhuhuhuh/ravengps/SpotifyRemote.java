@@ -1,19 +1,27 @@
 package io.github.uhuhuhuhuhuhuhuh.ravengps;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Base64;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.spotify.android.appremote.api.ConnectionParams;
 import com.spotify.android.appremote.api.Connector;
 import com.spotify.android.appremote.api.ContentApi;
 import com.spotify.android.appremote.api.SpotifyAppRemote;
+import com.spotify.protocol.types.Image;
+import com.spotify.protocol.types.ImageUri;
 import com.spotify.protocol.types.ListItem;
 import com.spotify.protocol.types.ListItems;
+import java.io.ByteArrayOutputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Spotify library browsing and playback through the App Remote SDK.
@@ -29,6 +37,8 @@ class SpotifyRemote {
     /** Must match the redirect URI registered for the client ID in Spotify's dashboard. */
     static final String REDIRECT_URI = "ravengps://callback";
     private static final int PAGE = 50;
+    /** Don't hold the list back for slow artwork. */
+    private static final long COVER_DEADLINE_MS = 6_000;
 
     interface ItemsCallback {
         void items(JSArray items);
@@ -117,7 +127,7 @@ class SpotifyRemote {
             ContentApi content = spotify.getContentApi();
             if (parentId == null || parentId.isEmpty()) {
                 content.getRecommendedContentItems(ContentApi.ContentType.NAVIGATION)
-                    .setResultCallback(result -> callback.items(toJson(result)))
+                    .setResultCallback(result -> withCovers(spotify, result, callback))
                     .setErrorCallback(error -> callback.failed(message(error, "Spotify wouldn't return your library.")));
                 return;
             }
@@ -127,7 +137,7 @@ class SpotifyRemote {
                 return;
             }
             content.getChildrenOfItem(parent, PAGE, 0)
-                .setResultCallback(result -> callback.items(toJson(result)))
+                .setResultCallback(result -> withCovers(spotify, result, callback))
                 .setErrorCallback(error -> callback.failed(message(error, "Spotify wouldn't open that.")));
         }, callback);
     }
@@ -172,9 +182,59 @@ class SpotifyRemote {
         }, bridge);
     }
 
-    private JSArray toJson(ListItems list) {
-        JSArray array = new JSArray();
-        if (list == null || list.items == null) return array;
+    /**
+     * Builds the list, then fills in cover art. Artwork has to be fetched from Spotify one
+     * image at a time, so the list is answered as soon as they're all in, or after a short
+     * deadline with whatever arrived: covers are nice to have, the list itself isn't.
+     */
+    private void withCovers(SpotifyAppRemote spotify, ListItems list, ItemsCallback callback) {
+        List<JSObject> entries = new ArrayList<>();
+        List<ListItem> sources = new ArrayList<>();
+        collect(list, entries, sources);
+
+        AtomicBoolean answered = new AtomicBoolean(false);
+        Runnable answer = () -> {
+            if (!answered.compareAndSet(false, true)) return;
+            JSArray array = new JSArray();
+            for (JSObject entry : entries) array.put(entry);
+            callback.items(array);
+        };
+
+        AtomicInteger pending = new AtomicInteger(0);
+        for (int index = 0; index < sources.size(); index++) {
+            ImageUri uri = sources.get(index).imageUri;
+            if (uri == null) continue;
+            JSObject entry = entries.get(index);
+            pending.incrementAndGet();
+            spotify.getImagesApi().getImage(uri, Image.Dimension.SMALL)
+                .setResultCallback(bitmap -> {
+                    String data = encode(bitmap);
+                    if (data != null) entry.put("icon", data);
+                    if (pending.decrementAndGet() == 0) answer.run();
+                })
+                .setErrorCallback(error -> {
+                    if (pending.decrementAndGet() == 0) answer.run();
+                });
+        }
+        if (pending.get() == 0) answer.run();
+        else main.postDelayed(answer, COVER_DEADLINE_MS);
+    }
+
+    /** Small JPEG data URL, the same shape the now-playing artwork uses. */
+    private static String encode(Bitmap bitmap) {
+        if (bitmap == null) return null;
+        try {
+            Bitmap scaled = Bitmap.createScaledBitmap(bitmap, 96, 96, true);
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            scaled.compress(Bitmap.CompressFormat.JPEG, 75, output);
+            return "data:image/jpeg;base64," + Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP);
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private void collect(ListItems list, List<JSObject> entries, List<ListItem> sources) {
+        if (list == null || list.items == null) return;
         for (ListItem item : list.items) {
             if (item == null) continue;
             String id = item.id != null && !item.id.isEmpty() ? item.id : item.uri;
@@ -187,9 +247,9 @@ class SpotifyRemote {
             entry.put("browsable", item.hasChildren);
             entry.put("playable", item.playable);
             entry.put("icon", JSObject.NULL);
-            array.put(entry);
+            entries.add(entry);
+            sources.add(item);
         }
-        return array;
     }
 
     void release() {
