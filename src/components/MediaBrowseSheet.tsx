@@ -10,11 +10,12 @@ type Props = {
   connector: Connector;
   browse: (packageName: string, parentId?: string) => Promise<MediaBrowseItem[]>;
   play: (packageName: string, mediaId: string) => Promise<void>;
+  onOpenApp: () => void;
   onClose: () => void;
 };
 
 /** Waze-style in-app library browser: drill into a music app's playlists and play one. */
-export function MediaBrowseSheet({ connector, browse, play, onClose }: Props) {
+export function MediaBrowseSheet({ connector, browse, play, onOpenApp, onClose }: Props) {
   const [stack, setStack] = useState<Crumb[]>([{ id: undefined, title: 'Library' }]);
   const [items, setItems] = useState<MediaBrowseItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,9 +30,11 @@ export function MediaBrowseSheet({ connector, browse, play, onClose }: Props) {
       const result = await browse(connector.package, parentId);
       setItems(result);
       if (result.length === 0) setError(`${connector.name} didn't share anything here. Open the app and sign in, then try again.`);
-    } catch (problem) {
+    } catch {
+      // Most players (Spotify, Plexamp…) only hand a library to callers they allow-list —
+      // Android Auto, Wear OS and their own partners — and refuse everyone else outright.
       setItems([]);
-      setError(problem instanceof Error ? problem.message : "Couldn't read this app's library.");
+      setError(`${connector.name} doesn't let other apps browse its library. Open it and start something; the player controls here will still work.`);
     } finally {
       setLoading(false);
     }
@@ -64,7 +67,10 @@ export function MediaBrowseSheet({ connector, browse, play, onClose }: Props) {
       {loading ? (
         <p className="note"><LoaderCircle size={16} className="spin" /> Loading…</p>
       ) : error ? (
-        <p className="note warn">{error}</p>
+        <div className="callout">
+          <p>{error}</p>
+          <button className="primary" onClick={onOpenApp}>Open {connector.name}</button>
+        </div>
       ) : (
         <ul className="browse-list">
           {items.map((item, index) => (

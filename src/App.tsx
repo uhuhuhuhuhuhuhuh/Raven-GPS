@@ -15,6 +15,7 @@ import { CameraRepository } from './lib/cameraData';
 import type { Camera, RouteCamera } from './lib/cameras';
 import { distanceText, formatClock, formatDistance, formatDuration, speedValue } from './lib/format';
 import { reversePlace, searchPlaces, type Place } from './lib/geocode';
+import { watchCompass } from './lib/compass';
 import { boundsOf, haversine, type Bounds, type LonLat } from './lib/geo';
 import { watchLocation } from './lib/location';
 import { RavenNative, isNative } from './lib/native';
@@ -57,6 +58,7 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [mode, setMode] = useState<Mode>('browse');
   const [position, setPosition] = useState<Fix | null>(null);
+  const [compass, setCompass] = useState<number | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [destination, setDestination] = useState<Place | null>(null);
   const [options, setOptions] = useState<RouteOption[]>([]);
@@ -167,6 +169,13 @@ export default function App() {
       }
     }
   };
+
+  // ---- Compass -------------------------------------------------------------------------
+  // Used for the map arrow when GPS has no course to give (stopped, or barely moving).
+  useEffect(() => {
+    const watch = watchCompass(setCompass);
+    return () => watch.stop();
+  }, []);
 
   // ---- Location ------------------------------------------------------------------------
   useEffect(() => {
@@ -332,10 +341,14 @@ export default function App() {
 
   // ---- Derived view state ----------------------------------------------------------------
   const livePoint: LonLat | null = nav?.state.snapped ?? (position ? [position.lon, position.lat] : null);
-  const heading = nav ? nav.state.heading : position?.heading ?? 0;
+  // GPS only reports a course while moving, so below walking pace prefer the compass: otherwise
+  // the arrow keeps pointing wherever we were last heading until the next move.
+  const speedNow = nav ? nav.state.speed : position?.speed ?? 0;
+  const courseNow = nav ? nav.state.heading : position?.heading ?? null;
+  const heading = (speedNow > 1.5 && courseNow !== null ? courseNow : compass ?? courseNow) ?? 0;
   const mapFollow: MapCamera | null = useMemo(() => {
     if (!follow) return null;
-    if (mode === 'navigate' && nav && livePoint) return { center: livePoint, bearing: nav.state.heading, zoom: followZoom(nav.state.speed), pitch: 55 };
+    if (mode === 'navigate' && nav && livePoint) return { center: livePoint, bearing: heading, zoom: followZoom(nav.state.speed), pitch: 55 };
     if (mode === 'browse') {
       // Follow the live position when we have one; otherwise (no GPS) restore the browse
       // view so ending a drive returns there instead of stranding on the simulated route.
@@ -344,7 +357,7 @@ export default function App() {
     }
     return null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [follow, mode, livePoint?.[0], livePoint?.[1], nav?.state.heading]);
+  }, [follow, mode, livePoint?.[0], livePoint?.[1], heading]);
 
   const navProgress = nav ? progress(nav.option.route, settings.cameraAlerts ? nav.option.cameras : [], nav.state) : null;
   const ahead = nav ? sliceLine(nav.option.route.line, nav.state.along) : null;
@@ -606,6 +619,7 @@ export default function App() {
           connector={browseApp}
           browse={media.browse}
           play={media.play}
+          onOpenApp={() => media.launch(browseApp.package, browseApp.web)}
           onClose={() => setSheet('connectors')}
         />
       )}
