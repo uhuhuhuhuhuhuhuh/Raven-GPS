@@ -515,7 +515,7 @@ public class RavenNativePlugin extends Plugin {
                         public void onError(String parent) {
                             if (!done.compareAndSet(false, true)) return;
                             main.removeCallbacks(timeout);
-                            call.reject("This app wouldn't share its library.");
+                            call.reject("This player only shares its library with apps it allow-lists, such as Android Auto.");
                             disconnectQuietly(holder[0]);
                         }
                     });
@@ -532,7 +532,7 @@ public class RavenNativePlugin extends Plugin {
             public void onConnectionFailed() {
                 if (done.compareAndSet(false, true)) {
                     main.removeCallbacks(timeout);
-                    call.reject("Couldn't connect to this app.");
+                    call.reject("This player only shares its library with apps it allow-lists, such as Android Auto.");
                     disconnectQuietly(holder[0]);
                 }
             }

@@ -30,11 +30,12 @@ export function MediaBrowseSheet({ connector, browse, play, onOpenApp, onClose }
       const result = await browse(connector.package, parentId);
       setItems(result);
       if (result.length === 0) setError(`${connector.name} didn't share anything here. Open the app and sign in, then try again.`);
-    } catch {
-      // Most players (Spotify, Plexamp…) only hand a library to callers they allow-list —
-      // Android Auto, Wear OS and their own partners — and refuse everyone else outright.
+    } catch (problem) {
+      // Show what actually went wrong. Swallowing it hid real Spotify App Remote failures
+      // (not registered, not Premium, not logged in) behind a generic refusal message.
+      const detail = problem instanceof Error && problem.message ? problem.message : '';
       setItems([]);
-      setError(`${connector.name} doesn't let other apps browse its library. Open it and start something; the player controls here will still work.`);
+      setError(detail || `${connector.name} didn't return anything to browse.`);
     } finally {
       setLoading(false);
     }
