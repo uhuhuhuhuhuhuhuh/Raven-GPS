@@ -1,6 +1,8 @@
 package io.github.uhuhuhuhuhuhuhuh.ravengps;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.spotify.android.appremote.api.ConnectionParams;
@@ -11,6 +13,7 @@ import com.spotify.protocol.types.ListItem;
 import com.spotify.protocol.types.ListItems;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Spotify library browsing and playback through the App Remote SDK.
@@ -41,6 +44,10 @@ class SpotifyRemote {
         void run(SpotifyAppRemote remote);
     }
 
+    /** App Remote can stay silent indefinitely (e.g. Spotify itself can't reach the network). */
+    private static final long TIMEOUT_MS = 15_000;
+
+    private final Handler main = new Handler(Looper.getMainLooper());
     private final Context context;
     private SpotifyAppRemote remote;
     /** Children are fetched by object, not id, so keep what we handed the web layer. */
@@ -84,8 +91,28 @@ class SpotifyRemote {
         });
     }
 
+    /** Answers exactly once, and always: App Remote may never call back at all. */
+    private ItemsCallback once(ItemsCallback callback) {
+        AtomicBoolean done = new AtomicBoolean(false);
+        main.postDelayed(() -> {
+            if (done.compareAndSet(false, true)) callback.failed("Spotify didn't respond. Check it's signed in and online, then try again.");
+        }, TIMEOUT_MS);
+        return new ItemsCallback() {
+            @Override
+            public void items(JSArray items) {
+                if (done.compareAndSet(false, true)) callback.items(items);
+            }
+
+            @Override
+            public void failed(String message) {
+                if (done.compareAndSet(false, true)) callback.failed(message);
+            }
+        };
+    }
+
     /** Top level when parentId is null, otherwise the children of that item. */
-    void browse(String clientId, String parentId, ItemsCallback callback) {
+    void browse(String clientId, String parentId, ItemsCallback raw) {
+        ItemsCallback callback = once(raw);
         connected(clientId, spotify -> {
             ContentApi content = spotify.getContentApi();
             if (parentId == null || parentId.isEmpty()) {
@@ -105,7 +132,22 @@ class SpotifyRemote {
         }, callback);
     }
 
-    void play(String clientId, String id, DoneCallback callback) {
+    void play(String clientId, String id, DoneCallback raw) {
+        AtomicBoolean done = new AtomicBoolean(false);
+        main.postDelayed(() -> {
+            if (done.compareAndSet(false, true)) raw.failed("Spotify didn't respond. Check it's signed in and online, then try again.");
+        }, TIMEOUT_MS);
+        DoneCallback callback = new DoneCallback() {
+            @Override
+            public void done() {
+                if (done.compareAndSet(false, true)) raw.done();
+            }
+
+            @Override
+            public void failed(String message) {
+                if (done.compareAndSet(false, true)) raw.failed(message);
+            }
+        };
         ItemsCallback bridge = new ItemsCallback() {
             @Override
             public void items(JSArray ignored) {}
