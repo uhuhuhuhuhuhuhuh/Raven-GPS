@@ -84,6 +84,9 @@ export default function App() {
     return Array.isArray(last) ? { center: last, zoom: 13 } : { center: [-96, 38.5] as LonLat, zoom: 3.4 };
   }, []);
   const mapCenter = useRef<LonLat>(initialView.center);
+  // Where the current trip started from; used to return the browse camera to the
+  // route origin after a drive when there's no live position to follow (no GPS).
+  const lastOrigin = useRef<LonLat | null>(null);
   const navRef = useRef<Nav | null>(null);
   navRef.current = nav;
   const settingsRef = useRef(settings);
@@ -189,7 +192,10 @@ export default function App() {
       if (!current) return;
       elapsed += SIM_SPEED * simBoost;
       const fix = simulatedFix(current.option.route === routeAtStart ? routeAtStart : current.option.route, elapsed, origin);
-      setPosition(fix);
+      // Drive the on-route marker via nav.state (onNavFix) only. Writing simulated
+      // fixes into `position` leaves it stranded at the sim's last point once the
+      // drive ends (no real fix overwrites it without GPS), parking the camera and
+      // poisoning the next plan origin / search. Real fixes still update `position`.
       onNavFix(fix);
     }, 1000);
     return () => clearInterval(timer);
@@ -203,6 +209,7 @@ export default function App() {
     const controller = new AbortController();
     planAbort.current = controller;
     const origin = position ? { lon: position.lon, lat: position.lat } : { lon: mapCenter.current[0], lat: mapCenter.current[1] };
+    lastOrigin.current = [origin.lon, origin.lat];
     setOptions([]);
     setPreview(null);
     setSelectedId(null);
@@ -320,9 +327,14 @@ export default function App() {
   const livePoint: LonLat | null = nav?.state.snapped ?? (position ? [position.lon, position.lat] : null);
   const heading = nav ? nav.state.heading : position?.heading ?? 0;
   const mapFollow: MapCamera | null = useMemo(() => {
-    if (!follow || !livePoint) return null;
-    if (mode === 'navigate' && nav) return { center: livePoint, bearing: nav.state.heading, zoom: followZoom(nav.state.speed), pitch: 55 };
-    if (mode === 'browse') return { center: livePoint, bearing: 0, zoom: 15, pitch: 0 };
+    if (!follow) return null;
+    if (mode === 'navigate' && nav && livePoint) return { center: livePoint, bearing: nav.state.heading, zoom: followZoom(nav.state.speed), pitch: 55 };
+    if (mode === 'browse') {
+      // Follow the live position when we have one; otherwise (no GPS) fall back to
+      // the trip origin so ending a drive returns here instead of stranding on the sim.
+      const center = livePoint ?? lastOrigin.current;
+      if (center) return { center, bearing: 0, zoom: 15, pitch: 0 };
+    }
     return null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [follow, mode, livePoint?.[0], livePoint?.[1], nav?.state.heading]);

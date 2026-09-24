@@ -98,6 +98,26 @@ test('camera avoidance can be switched off', async ({ page }) => {
   await expect(page.locator('.option[data-kind="direct"]')).toHaveCount(0);
 });
 
+test.describe('without GPS', () => {
+  test.use({ permissions: [] });
+  test('a preview drive does not strand the position after it ends', async ({ page }) => {
+    await mockServices(page);
+    await page.goto('/?simSpeed=12');
+    await page.getByTestId('search-open').click();
+    await page.getByLabel('Search places').fill('Sweet Auburn');
+    await page.getByRole('button', { name: /Sweet Auburn Market/ }).click();
+    await page.getByRole('button', { name: 'Preview drive' }).click();
+    // The puck tracks the simulated drive while it runs.
+    await expect(page.locator('.puck')).toHaveCount(1);
+    await expect(page.getByTestId('arrived')).toBeVisible({ timeout: 30_000 });
+    await page.getByRole('button', { name: 'Done' }).click();
+    // Back to browse: with no real fix, the simulated position must not linger as a
+    // stranded puck (it used to, parking the camera on the trip's end point).
+    await expect(page.getByTestId('search-open')).toBeVisible();
+    await expect(page.locator('.puck')).toHaveCount(0);
+  });
+});
+
 test('lists music connectors including Plex', async ({ page }) => {
   await mockServices(page);
   await page.goto('/');
