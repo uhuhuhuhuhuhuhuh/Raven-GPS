@@ -1,3 +1,4 @@
+import { timeoutSignal } from '../lib/signals';
 import type { StyleSpecification } from 'maplibre-gl';
 
 /**
@@ -40,7 +41,7 @@ export function tintStyle(style: StyleSpecification): StyleSpecification {
 
 export async function loadBasemap(): Promise<Basemap> {
   try {
-    const response = await fetch(OPENFREEMAP_STYLE_URL, { signal: AbortSignal.timeout(8000), headers: { Accept: 'application/json' } });
+    const response = await fetch(OPENFREEMAP_STYLE_URL, { signal: timeoutSignal(8000), headers: { Accept: 'application/json' } });
     if (!response.ok) throw new Error(`style request failed (${response.status})`);
     const style = (await response.json()) as StyleSpecification;
     if (style?.version !== 8 || !Array.isArray(style.layers) || !style.glyphs) throw new Error('unexpected style document');

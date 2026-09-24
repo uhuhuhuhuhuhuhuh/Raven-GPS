@@ -1,3 +1,4 @@
+import { throwIfAborted } from './signals';
 import { cameraSites, type RouteCamera } from './cameras';
 import { offsetPoint, type LonLat } from './geo';
 import type { RouteLine } from './routeLine';
@@ -182,7 +183,7 @@ export async function planRoutes(request: PlanRequest, fetchRoutes: RouteFetcher
   let seed: Exclusion[] = request.seed ?? [];
 
   for (const profile of request.profiles) {
-    signal?.throwIfAborted();
+    throwIfAborted(signal);
     const budget = request.budget ?? DEFAULT_BUDGET[profile];
     const pool: Candidate[] = [];
     // Updated from inside `ask`.

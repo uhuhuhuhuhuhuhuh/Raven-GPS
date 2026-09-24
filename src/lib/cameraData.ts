@@ -1,3 +1,4 @@
+import { timeoutSignal } from './signals';
 import { CameraIndex, cameraFromNode, type Camera } from './cameras';
 import { metersPerDegree, type Bounds, type LonLat } from './geo';
 import type { RouteLine } from './routeLine';
@@ -134,7 +135,7 @@ export class CameraRepository {
   tileIndex(): Promise<TileIndex | null> {
     this.tileIndexRequest ??= (async () => {
       try {
-        const response = await this.fetcher(new URL('osm/index.json', this.apiBase), { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
+        const response = await this.fetcher(new URL('osm/index.json', this.apiBase), { headers: { Accept: 'application/json' }, signal: timeoutSignal(15_000) });
         const index = response.ok ? parseTileIndex(await response.json()) : null;
         if (index) {
           await this.cache.set('index', index);

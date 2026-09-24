@@ -1,3 +1,5 @@
+import { throwIfAborted } from './signals';
+
 /**
  * Serializes requests to one service with a minimum gap between them. The FOSSGIS
  * routing server allows at most one request per second.
@@ -7,10 +9,10 @@ export function createRequestQueue(minIntervalMs: number, now = () => Date.now()
   let lastStart = -Infinity;
   return function schedule<T>(task: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     const run = async () => {
-      signal?.throwIfAborted();
+      throwIfAborted(signal);
       const wait = lastStart + minIntervalMs - now();
       if (wait > 0) await sleep(wait);
-      signal?.throwIfAborted();
+      throwIfAborted(signal);
       lastStart = now();
       return task();
     };

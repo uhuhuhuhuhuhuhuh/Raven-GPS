@@ -1,3 +1,4 @@
+import { anySignal, timeoutSignal } from './signals';
 import type { LonLat } from './geo';
 import { decodePolyline } from './polyline';
 import { createRequestQueue } from './requestQueue';
@@ -185,12 +186,12 @@ export function valhallaFetcher(endpoint = DEFAULT_ROUTING_ENDPOINT, fetchImpl: 
   const schedule = queue;
   return (request, signal) =>
     schedule(async () => {
-      const timeout = AbortSignal.timeout(30_000);
+      const timeout = timeoutSignal(30_000);
       const response = await fetchImpl(`${base}/route`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(buildRequestBody(request)),
-        signal: signal ? AbortSignal.any([signal, timeout]) : timeout
+        signal: signal ? anySignal([signal, timeout]) : timeout
       });
       const payload = (await response.json().catch(() => null)) as
         | { trip?: ValhallaTrip; alternates?: Array<{ trip: ValhallaTrip }>; error?: string; error_code?: number }
