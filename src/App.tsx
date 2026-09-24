@@ -1,6 +1,6 @@
 import { Share } from '@capacitor/share';
 import {
-  Briefcase, Clock, House, LoaderCircle, LocateFixed, MapPin, Search, Settings as SettingsIcon, Share2, ShieldAlert, ShieldCheck,
+  Briefcase, Clock, Download, House, LoaderCircle, LocateFixed, MapPin, Search, Settings as SettingsIcon, Share2, ShieldAlert, ShieldCheck,
   TriangleAlert, Volume2, VolumeX, X, FastForward, Route as RouteIcon, ExternalLink
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -8,7 +8,9 @@ import { ConnectorsSheet } from './components/ConnectorsSheet';
 import { ManeuverIcon } from './components/ManeuverIcon';
 import { MapView, type MapCamera } from './components/MapView';
 import { MediaBar } from './components/MediaBar';
+import { MediaBrowseSheet } from './components/MediaBrowseSheet';
 import { SettingsSheet } from './components/SettingsSheet';
+import type { Connector } from './lib/media';
 import { CameraRepository } from './lib/cameraData';
 import type { Camera, RouteCamera } from './lib/cameras';
 import { distanceText, formatClock, formatDistance, formatDuration, speedValue } from './lib/format';
@@ -24,6 +26,7 @@ import { avoidSummary, cameraMask, loadSettings, routePreferences, saveSettings,
 import { readJson, writeJson } from './lib/storage';
 import { persistentCache } from './lib/tileCache';
 import { useMedia } from './lib/useMedia';
+import { useUpdate } from './lib/useUpdate';
 import { valhallaFetcher, type ProfileId, type Route } from './lib/valhalla';
 import { createVoice } from './lib/voice';
 
@@ -64,7 +67,8 @@ export default function App() {
   const [alert, setAlert] = useState<{ hit: RouteCamera; distance: number } | null>(null);
   const [follow, setFollow] = useState(true);
   const [fitTo, setFitTo] = useState<Bounds | null>(null);
-  const [sheet, setSheet] = useState<'settings' | 'connectors' | null>(null);
+  const [sheet, setSheet] = useState<'settings' | 'connectors' | 'browse' | null>(null);
+  const [browseApp, setBrowseApp] = useState<Connector | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [viewCameras, setViewCameras] = useState<Camera[]>([]);
   const [cameraCard, setCameraCard] = useState<Camera | null>(null);
@@ -74,6 +78,7 @@ export default function App() {
   const [revision, setRevision] = useState(0);
   const [simBoost, setSimBoost] = useState(1);
   const media = useMedia();
+  const update = useUpdate();
 
   const repository = useMemo(() => new CameraRepository({ cache: persistentCache(), onChange: () => setRevision(value => value + 1) }), []);
   const cameraSource: CameraSource = useMemo(() => ({ ensureLine: (line, margin, signal) => repository.ensureLine(line, margin, signal), alongLine: (line, radius, mask) => repository.index.alongLine(line, radius, mask) }), [repository]);
@@ -401,6 +406,7 @@ export default function App() {
               {settings.avoidCameras && mask ? `Avoiding ${avoidSummary(settings)}` : 'Camera avoidance off'}
             </button>
             {gpsError && <span className="chip chip-warn"><TriangleAlert size={15} /> {gpsError}</span>}
+            {update.info?.available && <button className="chip chip-good" onClick={() => setSheet('settings')}><Download size={15} /> Update available</button>}
           </div>
         </>
       )}
@@ -578,7 +584,7 @@ export default function App() {
       )}
 
       {sheet === 'settings' && (
-        <SettingsSheet settings={settings} dataTimestamp={dataTimestamp} onChange={setSettings} onClose={() => setSheet(null)} onOpenConnectors={() => setSheet('connectors')} />
+        <SettingsSheet settings={settings} dataTimestamp={dataTimestamp} update={update} onChange={setSettings} onClose={() => setSheet(null)} onOpenConnectors={() => setSheet('connectors')} />
       )}
       {sheet === 'connectors' && (
         <ConnectorsSheet
@@ -588,8 +594,17 @@ export default function App() {
           preferred={settings.mediaApp}
           onGrant={media.grant}
           onLaunch={media.launch}
+          onBrowse={connector => { setBrowseApp(connector); setSheet('browse'); }}
           onPrefer={packageName => setSettings({ ...settings, mediaApp: packageName })}
           onClose={() => setSheet(null)}
+        />
+      )}
+      {sheet === 'browse' && browseApp && (
+        <MediaBrowseSheet
+          connector={browseApp}
+          browse={media.browse}
+          play={media.play}
+          onClose={() => setSheet('connectors')}
         />
       )}
     </div>

@@ -1,5 +1,5 @@
-import { Check, ShieldCheck } from 'lucide-react';
-import { CONNECTORS } from '../lib/media';
+import { Check, ExternalLink, ListMusic, ShieldCheck } from 'lucide-react';
+import { CONNECTORS, type Connector } from '../lib/media';
 import { Sheet } from './Sheet';
 
 type Props = {
@@ -9,11 +9,12 @@ type Props = {
   preferred: string | null;
   onGrant: () => void;
   onLaunch: (packageName: string, web: string) => void;
+  onBrowse: (connector: Connector) => void;
   onPrefer: (packageName: string) => void;
   onClose: () => void;
 };
 
-export function ConnectorsSheet({ native, granted, installed, preferred, onGrant, onLaunch, onPrefer, onClose }: Props) {
+export function ConnectorsSheet({ native, granted, installed, preferred, onGrant, onLaunch, onBrowse, onPrefer, onClose }: Props) {
   const sorted = [...CONNECTORS].sort((a, b) => Number(installed.includes(b.package)) - Number(installed.includes(a.package)));
   return (
     <Sheet title="Music & audio" onClose={onClose} className="connectors-sheet">
@@ -29,17 +30,27 @@ export function ConnectorsSheet({ native, granted, installed, preferred, onGrant
       ) : (
         <p className="note">Playback controls work in the Android app. Here, these open each service's web player.</p>
       )}
+      {native && granted && <p className="note">Tap an installed app to browse its playlists and play one here.</p>}
       <ul className="connector-grid">
         {sorted.map(connector => {
           const isInstalled = installed.includes(connector.package);
+          const canBrowse = native && granted && isInstalled;
           return (
             <li key={connector.id}>
-              <button className={`connector${preferred === connector.package ? ' preferred' : ''}`} onClick={() => { onPrefer(connector.package); onLaunch(connector.package, connector.web); }}>
+              <button
+                className={`connector${preferred === connector.package ? ' preferred' : ''}`}
+                onClick={() => { onPrefer(connector.package); if (canBrowse) onBrowse(connector); else onLaunch(connector.package, connector.web); }}
+              >
                 <span className="connector-badge" style={{ background: connector.color }}>{connector.name[0]}</span>
                 <span className="connector-name">{connector.name}</span>
-                {native && <small>{isInstalled ? 'Installed' : 'Get app'}</small>}
+                {native && <small>{canBrowse ? <><ListMusic size={12} /> Browse</> : isInstalled ? 'Open' : 'Get app'}</small>}
                 {preferred === connector.package && <Check size={14} className="connector-check" aria-label="Default" />}
               </button>
+              {canBrowse && (
+                <button className="connector-open" onClick={() => onLaunch(connector.package, connector.web)} aria-label={`Open ${connector.name}`}>
+                  <ExternalLink size={14} />
+                </button>
+              )}
             </li>
           );
         })}

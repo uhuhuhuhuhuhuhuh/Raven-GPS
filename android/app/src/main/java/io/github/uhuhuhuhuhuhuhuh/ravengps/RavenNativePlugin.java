@@ -4,12 +4,17 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
+import android.media.MediaDescription;
 import android.media.MediaMetadata;
+import android.media.browse.MediaBrowser;
 import android.media.session.MediaController;
+import android.media.session.MediaSession;
 import android.media.session.MediaSessionManager;
 import android.media.session.PlaybackState;
 import android.net.Uri;
@@ -24,6 +29,7 @@ import android.util.Base64;
 import android.view.KeyEvent;
 import android.view.WindowManager;
 import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.FileProvider;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -31,12 +37,18 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Native side of Raven GPS: spoken guidance that ducks music, keeping the screen on while
@@ -443,5 +455,255 @@ public class RavenNativePlugin extends Plugin {
             result.put("launched", false);
         }
         call.resolve(result);
+    }
+
+    // ---- Library browsing (Waze-style in-app music picker) ----------------------------
+
+    /** The MediaBrowserService a music app exposes for Android Auto / Assistant style browsing. */
+    private ComponentName mediaBrowserComponent(String packageName) {
+        Intent intent = new Intent("android.media.browse.MediaBrowserService");
+        intent.setPackage(packageName);
+        List<ResolveInfo> services = getContext().getPackageManager().queryIntentServices(intent, 0);
+        if (services == null || services.isEmpty()) return null;
+        ServiceInfo info = services.get(0).serviceInfo;
+        return new ComponentName(info.packageName, info.name);
+    }
+
+    @PluginMethod
+    public void mediaBrowse(PluginCall call) {
+        String packageName = call.getString("package", "");
+        String parentId = call.getString("parentId");
+        if (packageName == null || packageName.isEmpty()) {
+            call.reject("package required");
+            return;
+        }
+        ComponentName component = mediaBrowserComponent(packageName);
+        if (component == null) {
+            call.reject("This app can't be browsed.");
+            return;
+        }
+        main.post(() -> connectAndBrowse(call, component, parentId));
+    }
+
+    private void connectAndBrowse(PluginCall call, ComponentName component, String parentId) {
+        final AtomicBoolean done = new AtomicBoolean(false);
+        final MediaBrowser[] holder = new MediaBrowser[1];
+        final Runnable timeout = () -> {
+            if (done.compareAndSet(false, true)) {
+                disconnectQuietly(holder[0]);
+                call.reject("Timed out reading this app's library.");
+            }
+        };
+        MediaBrowser.ConnectionCallback connection = new MediaBrowser.ConnectionCallback() {
+            @Override
+            public void onConnected() {
+                try {
+                    String root = parentId != null ? parentId : holder[0].getRoot();
+                    holder[0].subscribe(root, new MediaBrowser.SubscriptionCallback() {
+                        @Override
+                        public void onChildrenLoaded(String parent, List<MediaBrowser.MediaItem> children) {
+                            if (!done.compareAndSet(false, true)) return;
+                            main.removeCallbacks(timeout);
+                            JSObject result = new JSObject();
+                            result.put("items", browseItems(children));
+                            call.resolve(result);
+                            disconnectQuietly(holder[0]);
+                        }
+
+                        @Override
+                        public void onError(String parent) {
+                            if (!done.compareAndSet(false, true)) return;
+                            main.removeCallbacks(timeout);
+                            call.reject("This app wouldn't share its library.");
+                            disconnectQuietly(holder[0]);
+                        }
+                    });
+                } catch (RuntimeException error) {
+                    if (done.compareAndSet(false, true)) {
+                        main.removeCallbacks(timeout);
+                        call.reject("Browse failed.");
+                        disconnectQuietly(holder[0]);
+                    }
+                }
+            }
+
+            @Override
+            public void onConnectionFailed() {
+                if (done.compareAndSet(false, true)) {
+                    main.removeCallbacks(timeout);
+                    call.reject("Couldn't connect to this app.");
+                    disconnectQuietly(holder[0]);
+                }
+            }
+        };
+        try {
+            holder[0] = new MediaBrowser(getContext(), component, connection, null);
+            holder[0].connect();
+            main.postDelayed(timeout, 12000);
+        } catch (RuntimeException error) {
+            call.reject("Couldn't connect to this app.");
+        }
+    }
+
+    private JSArray browseItems(List<MediaBrowser.MediaItem> items) {
+        JSArray array = new JSArray();
+        if (items == null) return array;
+        for (MediaBrowser.MediaItem item : items) {
+            MediaDescription description = item.getDescription();
+            JSObject entry = new JSObject();
+            String id = description.getMediaId();
+            entry.put("id", id == null ? "" : id);
+            entry.put("title", description.getTitle() == null ? "" : description.getTitle().toString());
+            entry.put("subtitle", description.getSubtitle() == null ? "" : description.getSubtitle().toString());
+            entry.put("browsable", item.isBrowsable());
+            entry.put("playable", item.isPlayable());
+            Uri icon = description.getIconUri();
+            entry.put("icon", icon == null ? JSObject.NULL : icon.toString());
+            array.put(entry);
+        }
+        return array;
+    }
+
+    @PluginMethod
+    public void mediaPlayId(PluginCall call) {
+        String packageName = call.getString("package", "");
+        String mediaId = call.getString("mediaId", "");
+        if (packageName == null || packageName.isEmpty() || mediaId == null || mediaId.isEmpty()) {
+            call.reject("package and mediaId required");
+            return;
+        }
+        ComponentName component = mediaBrowserComponent(packageName);
+        if (component == null) {
+            call.reject("This app can't start playback by id.");
+            return;
+        }
+        main.post(() -> connectAndPlay(call, component, mediaId));
+    }
+
+    private void connectAndPlay(PluginCall call, ComponentName component, String mediaId) {
+        final AtomicBoolean done = new AtomicBoolean(false);
+        final MediaBrowser[] holder = new MediaBrowser[1];
+        final Runnable timeout = () -> {
+            if (done.compareAndSet(false, true)) {
+                disconnectQuietly(holder[0]);
+                call.reject("Timed out starting playback.");
+            }
+        };
+        MediaBrowser.ConnectionCallback connection = new MediaBrowser.ConnectionCallback() {
+            @Override
+            public void onConnected() {
+                if (!done.compareAndSet(false, true)) return;
+                main.removeCallbacks(timeout);
+                try {
+                    MediaSession.Token token = holder[0].getSessionToken();
+                    MediaController target = new MediaController(getContext(), token);
+                    target.getTransportControls().playFromMediaId(mediaId, null);
+                    call.resolve();
+                } catch (RuntimeException error) {
+                    call.reject("Couldn't start playback.");
+                } finally {
+                    // Let the session start, then refresh now-playing and drop the browser.
+                    main.postDelayed(() -> selectController(), 800);
+                    main.postDelayed(() -> disconnectQuietly(holder[0]), 3000);
+                }
+            }
+
+            @Override
+            public void onConnectionFailed() {
+                if (done.compareAndSet(false, true)) {
+                    main.removeCallbacks(timeout);
+                    call.reject("Couldn't connect to this app.");
+                    disconnectQuietly(holder[0]);
+                }
+            }
+        };
+        try {
+            holder[0] = new MediaBrowser(getContext(), component, connection, null);
+            holder[0].connect();
+            main.postDelayed(timeout, 12000);
+        } catch (RuntimeException error) {
+            call.reject("Couldn't connect to this app.");
+        }
+    }
+
+    private void disconnectQuietly(MediaBrowser browser) {
+        if (browser == null) return;
+        try {
+            browser.disconnect();
+        } catch (RuntimeException ignored) {
+            // already gone
+        }
+    }
+
+    // ---- In-app updater ---------------------------------------------------------------
+
+    @PluginMethod
+    public void appInfo(PluginCall call) {
+        JSObject result = new JSObject();
+        try {
+            android.content.pm.PackageInfo info = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0);
+            long code = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P ? info.getLongVersionCode() : info.versionCode;
+            result.put("versionCode", (int) code);
+            result.put("versionName", info.versionName == null ? "" : info.versionName);
+        } catch (PackageManager.NameNotFoundException error) {
+            result.put("versionCode", 0);
+            result.put("versionName", "");
+        }
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void downloadAndInstall(PluginCall call) {
+        String url = call.getString("url", "");
+        if (url == null || url.isEmpty()) {
+            call.reject("url required");
+            return;
+        }
+        new Thread(() -> {
+            try {
+                File dir = new File(getContext().getCacheDir(), "updates");
+                dir.mkdirs();
+                File apk = new File(dir, "raven-gps.apk");
+                downloadTo(url, apk);
+                Uri uri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", apk);
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setDataAndType(uri, "application/vnd.android.package-archive");
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(intent);
+                JSObject result = new JSObject();
+                result.put("started", true);
+                call.resolve(result);
+            } catch (Exception error) {
+                call.reject("Update failed: " + error.getMessage());
+            }
+        }).start();
+    }
+
+    private void downloadTo(String url, File dest) throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        connection.setInstanceFollowRedirects(true);
+        connection.setConnectTimeout(15000);
+        connection.setReadTimeout(30000);
+        try {
+            int code = connection.getResponseCode();
+            // GitHub asset URLs redirect to a CDN; HttpURLConnection won't follow across
+            // http<->https, so follow one hop by hand when needed.
+            if (code == HttpURLConnection.HTTP_MOVED_PERM || code == HttpURLConnection.HTTP_MOVED_TEMP || code == 307 || code == 308) {
+                String location = connection.getHeaderField("Location");
+                connection.disconnect();
+                connection = (HttpURLConnection) new URL(location).openConnection();
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(30000);
+                code = connection.getResponseCode();
+            }
+            if (code != HttpURLConnection.HTTP_OK) throw new Exception("HTTP " + code);
+            try (InputStream input = connection.getInputStream(); FileOutputStream output = new FileOutputStream(dest)) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+            }
+        } finally {
+            connection.disconnect();
+        }
     }
 }

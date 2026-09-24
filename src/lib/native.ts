@@ -19,6 +19,20 @@ export type NowPlaying = {
 
 export type MediaAction = 'play' | 'pause' | 'toggle' | 'next' | 'previous';
 
+/** One entry in a music app's browse tree (a playlist/album/folder, or a track). */
+export type MediaBrowseItem = {
+  /** Opaque media id from the source app; pass back to mediaBrowse or mediaPlayId. */
+  id: string;
+  title: string;
+  subtitle: string;
+  /** Can be opened to reveal children (a playlist, album or folder). */
+  browsable: boolean;
+  /** Can be played directly (a track, or a playable playlist). */
+  playable: boolean;
+  /** content:// or http(s):// icon URI, when the app provides one. */
+  icon: string | null;
+};
+
 export interface RavenNativePlugin {
   speak(options: { text: string; rate?: number; language?: string }): Promise<void>;
   stopSpeaking(): Promise<void>;
@@ -27,8 +41,16 @@ export interface RavenNativePlugin {
   openMediaAccessSettings(): Promise<void>;
   nowPlaying(): Promise<{ playing?: NowPlaying }>;
   mediaControl(options: { action: MediaAction }): Promise<void>;
+  /** Browse a music app's library. Omit parentId for the top level. */
+  mediaBrowse(options: { package: string; parentId?: string }): Promise<{ items: MediaBrowseItem[] }>;
+  /** Start playback of a browsed item in its source app. */
+  mediaPlayId(options: { package: string; mediaId: string }): Promise<void>;
   installedApps(options: { packages: string[] }): Promise<{ installed: string[] }>;
   launchApp(options: { package: string; web?: string }): Promise<{ launched: boolean }>;
+  /** Installed app version, for the in-app updater. */
+  appInfo(): Promise<{ versionCode: number; versionName: string }>;
+  /** Download an APK and hand it to the system installer. */
+  downloadAndInstall(options: { url: string }): Promise<{ started: boolean }>;
   addListener(event: 'nowPlaying', listener: (info: { playing?: NowPlaying }) => void): Promise<PluginListenerHandle>;
 }
 
@@ -74,6 +96,12 @@ class RavenNativeWeb extends WebPlugin implements RavenNativePlugin {
 
   async mediaControl(): Promise<void> {}
 
+  async mediaBrowse() {
+    return { items: [] };
+  }
+
+  async mediaPlayId(): Promise<void> {}
+
   async installedApps() {
     return { installed: [] };
   }
@@ -81,6 +109,15 @@ class RavenNativeWeb extends WebPlugin implements RavenNativePlugin {
   async launchApp(options: { package: string; web?: string }) {
     if (options.web) window.open(options.web, '_blank', 'noopener');
     return { launched: Boolean(options.web) };
+  }
+
+  async appInfo() {
+    return { versionCode: 0, versionName: 'web' };
+  }
+
+  async downloadAndInstall(options: { url: string }) {
+    window.open(options.url, '_blank', 'noopener');
+    return { started: false };
   }
 }
 

@@ -211,3 +211,18 @@ h2, h3, p { margin: 0; }
   .sheet { border-radius: 24px; margin-bottom: 16px; }
   .sheet-backdrop { align-items: center; }
 }
+
+/* In-app library browser (Waze-style music picker) */
+.connector-grid li { position: relative; }
+.connector-open { position: absolute; top: 6px; left: 6px; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 9px; background: rgba(0,0,0,0.35); color: var(--muted); }
+.connector small { display: inline-flex; align-items: center; gap: 3px; }
+.browse-sheet .browse-path { display: flex; align-items: center; gap: 6px; margin: 2px 0 10px; min-height: 32px; }
+.browse-crumb { font-size: 13px; color: var(--muted); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browse-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.browse-item { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 13px; background: var(--raised); text-align: left; }
+.browse-item:disabled { opacity: 0.5; }
+.browse-icon { width: 40px; height: 40px; flex: none; border-radius: 11px; display: grid; place-items: center; background: rgba(255,255,255,0.05); border: 1.5px solid var(--line); }
+.browse-labels { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.browse-labels strong { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browse-labels small { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browse-play { flex: none; color: var(--accent); }

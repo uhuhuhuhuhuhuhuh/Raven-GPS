@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CONNECTORS } from './media';
-import { RavenNative, isNative, type MediaAction, type NowPlaying } from './native';
+import { RavenNative, isNative, type MediaAction, type MediaBrowseItem, type NowPlaying } from './native';
 
 /** Media connector state: access, installed players and what's playing now. */
 export function useMedia() {
@@ -44,9 +44,19 @@ export function useMedia() {
     void RavenNative.launchApp({ package: packageName, web }).catch(() => undefined);
   }, []);
 
+  const browse = useCallback(async (packageName: string, parentId?: string): Promise<MediaBrowseItem[]> => {
+    if (!native) return [];
+    return (await RavenNative.mediaBrowse({ package: packageName, parentId })).items;
+  }, [native]);
+
+  const play = useCallback(async (packageName: string, mediaId: string): Promise<void> => {
+    await RavenNative.mediaPlayId({ package: packageName, mediaId });
+    void refresh();
+  }, [refresh]);
+
   const grant = useCallback(() => {
     void RavenNative.openMediaAccessSettings().catch(() => undefined);
   }, []);
 
-  return { native, granted, nowPlaying, installed, control, launch, grant, refresh };
+  return { native, granted, nowPlaying, installed, control, launch, browse, play, grant, refresh };
 }

@@ -1,18 +1,29 @@
-import { ExternalLink, Music } from 'lucide-react';
+import { Download, ExternalLink, Music, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { DEFAULT_ROUTING_ENDPOINT } from '../lib/valhalla';
 import { DEFAULT_SETTINGS, type Settings } from '../lib/settings';
+import type { UpdateInfo } from '../lib/update';
 import { Segmented, Sheet, Toggle } from './Sheet';
+
+type UpdateProps = {
+  native: boolean;
+  info: UpdateInfo | null;
+  checking: boolean;
+  installing: boolean;
+  check: () => void;
+  install: () => void;
+};
 
 type Props = {
   settings: Settings;
   dataTimestamp: string | null;
+  update: UpdateProps;
   onChange: (settings: Settings) => void;
   onClose: () => void;
   onOpenConnectors: () => void;
 };
 
-export function SettingsSheet({ settings, dataTimestamp, onChange, onClose, onOpenConnectors }: Props) {
+export function SettingsSheet({ settings, dataTimestamp, update, onChange, onClose, onOpenConnectors }: Props) {
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => onChange({ ...settings, [key]: value });
   const [endpoint, setEndpoint] = useState(settings.routingEndpoint);
   const nothingSelected = !settings.avoidFlock && !settings.avoidPlateReaders && !settings.avoidEnforcement;
@@ -41,6 +52,24 @@ export function SettingsSheet({ settings, dataTimestamp, onChange, onClose, onOp
 
       <h3>Music & audio</h3>
       <button className="row-button" onClick={onOpenConnectors}><Music size={18} /> Connect Spotify, Plexamp, YouTube Music…</button>
+
+      {update.native && (
+        <>
+          <h3>Updates</h3>
+          {update.info?.available ? (
+            <div className="callout">
+              <p>Raven GPS {update.info.versionName ?? 'update'} is available.</p>
+              <button className="primary" onClick={update.install} disabled={update.installing}>
+                <Download size={16} /> {update.installing ? 'Downloading…' : 'Download & install'}
+              </button>
+            </div>
+          ) : (
+            <button className="row-button" onClick={update.check} disabled={update.checking}>
+              <RefreshCw size={18} /> {update.checking ? 'Checking…' : "You're up to date · Check again"}
+            </button>
+          )}
+        </>
+      )}
 
       <h3>Advanced</h3>
       <label className="field">
