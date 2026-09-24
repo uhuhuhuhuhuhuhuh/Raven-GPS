@@ -1,0 +1,106 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
+  apk:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      RAVEN_VERSION_CODE: ${{ github.run_number }}
+      RAVEN_VERSION_NAME: 1.0.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: npm ci
+      - name: Build web app and sync it into the Android project
+        run: npm run build && npx cap sync android
+
+      # Without a release key, APKs are signed with a debug key. Reusing the same one keeps
+      # each new build installable over the last (Android rejects a changed signature).
+      - name: Restore debug signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: raven-gps-debug-keystore-v1
+      - name: Use release signing key (optional repository secrets)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "RAVEN_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          fi
+      - name: Build APK
+        env:
+          RAVEN_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          RAVEN_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          RAVEN_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/raven-gps.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: raven-gps-apk
+          path: raven-gps.apk
+
+      # main -> "latest" release; v* tags -> a versioned release; other branches -> a
+      # "preview" pre-release. Each carries raven-gps.apk, ready to install on a phone.
+      - name: Publish release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            gh release create "$GITHUB_REF_NAME" raven-gps.apk --title "Raven GPS $GITHUB_REF_NAME" --generate-notes
+            exit 0
+          fi
+          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            tag=latest; title="Raven GPS (latest build)"; flags=""
+          else
+            tag=preview; title="Raven GPS preview ($GITHUB_REF_NAME)"; flags="--prerelease"
+          fi
+          notes="Build ${RAVEN_VERSION_NAME} from ${GITHUB_SHA::7}. Download raven-gps.apk on your Android phone, open it and allow installing from this source."
+          gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$tag" raven-gps.apk --target "$GITHUB_SHA" --title "$title" --notes "$notes" $flags
