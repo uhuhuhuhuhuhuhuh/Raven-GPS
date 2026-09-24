@@ -19,6 +19,9 @@ type Props = {
   destination: LonLat | null;
   follow: MapCamera | null;
   fitTo: Bounds | null;
+  /** One-shot camera restore (e.g. back to the pre-trip view when a drive ends). */
+  restoreTo: { center: LonLat; zoom: number } | null;
+  onRestored: () => void;
   initialCenter: LonLat;
   initialZoom: number;
   onSelectRoute: (id: string) => void;
@@ -197,6 +200,16 @@ export function MapView(props: Props) {
     const bottom = Math.round(map.getContainer().clientHeight * 0.42);
     map.easeTo({ center: props.follow.center, bearing: props.follow.bearing, zoom: props.follow.zoom, pitch: props.follow.pitch, padding: { top: 0, bottom, left: 0, right: 0 }, duration: 950, easing: t => t });
   }, [ready, props.follow]);
+
+  // A single move back to a remembered view. Deliberately not a standing camera: re-issuing
+  // one would fight `onViewChange`, because the follow camera pads the bottom of the map and
+  // so never reports back the centre it was given.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map || !props.restoreTo) return;
+    map.easeTo({ center: props.restoreTo.center, zoom: props.restoreTo.zoom, bearing: 0, pitch: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 650 });
+    handlers.current.onRestored();
+  }, [ready, props.restoreTo]);
 
   useEffect(() => {
     const map = mapRef.current;

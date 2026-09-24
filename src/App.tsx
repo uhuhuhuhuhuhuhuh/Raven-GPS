@@ -59,6 +59,7 @@ export default function App() {
   const [mode, setMode] = useState<Mode>('browse');
   const [position, setPosition] = useState<Fix | null>(null);
   const [compass, setCompass] = useState<number | null>(null);
+  const [restoreView, setRestoreView] = useState<{ center: LonLat; zoom: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [destination, setDestination] = useState<Place | null>(null);
   const [options, setOptions] = useState<RouteOption[]>([]);
@@ -98,6 +99,8 @@ export default function App() {
   navRef.current = nav;
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  const positionRef = useRef(position);
+  positionRef.current = position;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const planAbort = useRef<AbortController | null>(null);
@@ -272,6 +275,8 @@ export default function App() {
 
   const cancelPreview = useCallback(() => {
     planAbort.current?.abort();
+    // With no live fix there's nothing to follow back to, so put the map where it was.
+    if (!positionRef.current) setRestoreView(browseView.current);
     setMode('browse');
     setDestination(null);
     setOptions([]);
@@ -298,6 +303,7 @@ export default function App() {
   }, [selected, handleEvents]);
 
   const endDrive = useCallback(() => {
+    if (!positionRef.current) setRestoreView(browseView.current);
     setNav(null);
     navRef.current = null;
     setMode('browse');
@@ -346,18 +352,16 @@ export default function App() {
   const speedNow = nav ? nav.state.speed : position?.speed ?? 0;
   const courseNow = nav ? nav.state.heading : position?.heading ?? null;
   const heading = (speedNow > 1.5 && courseNow !== null ? courseNow : compass ?? courseNow) ?? 0;
+  // Browsing is north-up, so only the navigate camera turns with the heading; keeping the
+  // compass out of the browse camera stops it re-easing on every magnetometer sample.
+  const followBearing = mode === 'navigate' ? heading : 0;
   const mapFollow: MapCamera | null = useMemo(() => {
-    if (!follow) return null;
-    if (mode === 'navigate' && nav && livePoint) return { center: livePoint, bearing: heading, zoom: followZoom(nav.state.speed), pitch: 55 };
-    if (mode === 'browse') {
-      // Follow the live position when we have one; otherwise (no GPS) restore the browse
-      // view so ending a drive returns there instead of stranding on the simulated route.
-      if (livePoint) return { center: livePoint, bearing: 0, zoom: 15, pitch: 0 };
-      return { center: browseView.current.center, bearing: 0, zoom: browseView.current.zoom, pitch: 0 };
-    }
+    if (!follow || !livePoint) return null;
+    if (mode === 'navigate' && nav) return { center: livePoint, bearing: followBearing, zoom: followZoom(nav.state.speed), pitch: 55 };
+    if (mode === 'browse') return { center: livePoint, bearing: 0, zoom: 15, pitch: 0 };
     return null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [follow, mode, livePoint?.[0], livePoint?.[1], heading]);
+  }, [follow, mode, livePoint?.[0], livePoint?.[1], followBearing, nav?.state.speed]);
 
   const navProgress = nav ? progress(nav.option.route, settings.cameraAlerts ? nav.option.cameras : [], nav.state) : null;
   const ahead = nav ? sliceLine(nav.option.route.line, nav.state.along) : null;
@@ -394,6 +398,8 @@ export default function App() {
         destination={destination ? [destination.lon, destination.lat] : null}
         follow={mapFollow}
         fitTo={mode === 'preview' ? fitTo : null}
+        restoreTo={restoreView}
+        onRestored={() => setRestoreView(null)}
         initialCenter={initialView.center}
         initialZoom={initialView.zoom}
         onSelectRoute={id => setSelectedId(id)}
