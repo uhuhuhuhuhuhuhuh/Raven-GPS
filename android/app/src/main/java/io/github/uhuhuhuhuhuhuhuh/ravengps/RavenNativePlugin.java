@@ -641,7 +641,10 @@ public class RavenNativePlugin extends Plugin {
     private SpotifyRemote spotify;
 
     private synchronized SpotifyRemote spotify() {
-        if (spotify == null) spotify = new SpotifyRemote(getContext());
+        // Must be the Activity, not the Application context: App Remote's showAuthView needs a
+        // window to put the "allow this app to use Spotify" screen in. With the application
+        // context it can't show it and fails with "Explicit user authorization is required".
+        if (spotify == null) spotify = new SpotifyRemote(getActivity() != null ? getActivity() : getContext());
         return spotify;
     }
 
