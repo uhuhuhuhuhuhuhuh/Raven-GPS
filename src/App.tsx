@@ -89,11 +89,13 @@ export default function App() {
     return Array.isArray(last) ? { center: last, zoom: 13 } : { center: [-96, 38.5] as LonLat, zoom: 3.4 };
   }, []);
   const mapCenter = useRef<LonLat>(initialView.center);
-  // Where the current trip started from; used to return the browse camera to the
-  // route origin after a drive when there's no live position to follow (no GPS).
-  const lastOrigin = useRef<LonLat | null>(null);
+  // The last browse-mode camera; used to restore the view after a drive ends when there's
+  // no live position to follow (e.g. no GPS), instead of stranding on the simulated route.
+  const browseView = useRef<{ center: LonLat; zoom: number }>({ center: initialView.center, zoom: initialView.zoom });
   const navRef = useRef<Nav | null>(null);
   navRef.current = nav;
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const planAbort = useRef<AbortController | null>(null);
@@ -214,7 +216,6 @@ export default function App() {
     const controller = new AbortController();
     planAbort.current = controller;
     const origin = position ? { lon: position.lon, lat: position.lat } : { lon: mapCenter.current[0], lat: mapCenter.current[1] };
-    lastOrigin.current = [origin.lon, origin.lat];
     setOptions([]);
     setPreview(null);
     setSelectedId(null);
@@ -314,6 +315,7 @@ export default function App() {
   const onViewChange = useCallback((bounds: Bounds, zoom: number) => {
     viewRef.current = { bounds, zoom };
     mapCenter.current = [(bounds.west + bounds.east) / 2, (bounds.south + bounds.north) / 2];
+    if (modeRef.current === 'browse') browseView.current = { center: mapCenter.current, zoom };
     if (settings.showCameras && zoom >= 10) void repository.ensureBounds(bounds, undefined, 6).catch(() => null);
     refreshViewCameras();
   }, [repository, settings.showCameras, refreshViewCameras]);
@@ -335,10 +337,10 @@ export default function App() {
     if (!follow) return null;
     if (mode === 'navigate' && nav && livePoint) return { center: livePoint, bearing: nav.state.heading, zoom: followZoom(nav.state.speed), pitch: 55 };
     if (mode === 'browse') {
-      // Follow the live position when we have one; otherwise (no GPS) fall back to
-      // the trip origin so ending a drive returns here instead of stranding on the sim.
-      const center = livePoint ?? lastOrigin.current;
-      if (center) return { center, bearing: 0, zoom: 15, pitch: 0 };
+      // Follow the live position when we have one; otherwise (no GPS) restore the browse
+      // view so ending a drive returns there instead of stranding on the simulated route.
+      if (livePoint) return { center: livePoint, bearing: 0, zoom: 15, pitch: 0 };
+      return { center: browseView.current.center, bearing: 0, zoom: browseView.current.zoom, pitch: 0 };
     }
     return null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
