@@ -10,6 +10,9 @@ android {
         // CI passes the run number, so each build installs over the previous one.
         versionCode((System.getenv("RAVEN_VERSION_CODE") ?: "1").toInteger())
         versionName(System.getenv("RAVEN_VERSION_NAME") ?: "1.0.0-dev")
+        // Spotify's auth library declares its redirect activity with these placeholders; they
+        // have to match the redirect URI registered for the client ID (ravengps://callback).
+        manifestPlaceholders = [redirectSchemeName: "ravengps", redirectHostName: "callback"]
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
