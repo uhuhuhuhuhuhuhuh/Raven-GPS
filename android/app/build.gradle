@@ -61,6 +61,12 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    // Spotify App Remote: Spotify does not publish this to Maven, so the .aar from their
+    // GitHub release is vendored in libs/ and picked up by the flatDir repository above.
+    // Needed because Spotify's MediaBrowserService refuses to serve a library to callers it
+    // hasn't allow-listed, which is every app that isn't Android Auto or a named partner.
+    implementation(name: 'spotify-app-remote-release-0.8.0', ext: 'aar')
+    implementation "com.google.code.gson:gson:2.10.1"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

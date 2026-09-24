@@ -1,5 +1,5 @@
 import { Check, ExternalLink, ListMusic, ShieldCheck } from 'lucide-react';
-import { CONNECTORS, type Connector } from '../lib/media';
+import { CONNECTORS, SPOTIFY_PACKAGE, type Connector } from '../lib/media';
 import { Sheet } from './Sheet';
 
 type Props = {
@@ -34,7 +34,8 @@ export function ConnectorsSheet({ native, granted, installed, preferred, onGrant
       <ul className="connector-grid">
         {sorted.map(connector => {
           const isInstalled = installed.includes(connector.package);
-          const canBrowse = native && granted && isInstalled;
+          // Spotify goes through App Remote, which doesn't need notification access.
+          const canBrowse = native && isInstalled && (granted || connector.package === SPOTIFY_PACKAGE);
           return (
             <li key={connector.id}>
               <button

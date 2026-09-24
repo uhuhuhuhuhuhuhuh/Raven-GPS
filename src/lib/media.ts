@@ -14,6 +14,16 @@ export type Connector = {
   color: string;
 };
 
+/** Spotify's package: it needs the App Remote SDK rather than the generic MediaBrowser path. */
+export const SPOTIFY_PACKAGE = 'com.spotify.music';
+
+/**
+ * Spotify client ID for Raven GPS, registered against this app's package name, signing SHA1 and
+ * the ravengps://callback redirect. A client ID is a public identifier meant to ship in the app;
+ * the matching client *secret* is server-side only and is deliberately not here.
+ */
+export const SPOTIFY_CLIENT_ID = '01f216958713499dbeec3d60956b73e6';
+
 export const CONNECTORS: Connector[] = [
   { id: 'spotify', name: 'Spotify', package: 'com.spotify.music', web: 'https://open.spotify.com', color: '#1ed760' },
   { id: 'plexamp', name: 'Plexamp', package: 'tv.plex.labs.plexamp', web: 'https://listen.plex.tv', color: '#ebaf00' },

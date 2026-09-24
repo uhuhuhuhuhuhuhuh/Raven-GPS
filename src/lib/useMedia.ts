@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CONNECTORS } from './media';
+import { CONNECTORS, SPOTIFY_CLIENT_ID, SPOTIFY_PACKAGE } from './media';
 import { RavenNative, isNative, type MediaAction, type MediaBrowseItem, type NowPlaying } from './native';
 
 /** Media connector state: access, installed players and what's playing now. */
@@ -46,11 +46,15 @@ export function useMedia() {
 
   const browse = useCallback(async (packageName: string, parentId?: string): Promise<MediaBrowseItem[]> => {
     if (!native) return [];
+    if (packageName === SPOTIFY_PACKAGE) {
+      return (await RavenNative.spotifyBrowse({ clientId: SPOTIFY_CLIENT_ID, parentId })).items;
+    }
     return (await RavenNative.mediaBrowse({ package: packageName, parentId })).items;
   }, [native]);
 
   const play = useCallback(async (packageName: string, mediaId: string): Promise<void> => {
-    await RavenNative.mediaPlayId({ package: packageName, mediaId });
+    if (packageName === SPOTIFY_PACKAGE) await RavenNative.spotifyPlay({ clientId: SPOTIFY_CLIENT_ID, id: mediaId });
+    else await RavenNative.mediaPlayId({ package: packageName, mediaId });
     void refresh();
   }, [refresh]);
 

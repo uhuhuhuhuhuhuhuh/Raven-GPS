@@ -109,6 +109,7 @@ public class RavenNativePlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         if (tts != null) tts.shutdown();
+        if (spotify != null) spotify.release();
         if (sessionManager != null && sessionsListener != null) sessionManager.removeOnActiveSessionsChangedListener(sessionsListener);
         if (controller != null) controller.unregisterCallback(controllerCallback);
         super.handleOnDestroy();
@@ -633,6 +634,64 @@ public class RavenNativePlugin extends Plugin {
         } catch (RuntimeException ignored) {
             // already gone
         }
+    }
+
+    // ---- Spotify (App Remote) ---------------------------------------------------------
+
+    private SpotifyRemote spotify;
+
+    private synchronized SpotifyRemote spotify() {
+        if (spotify == null) spotify = new SpotifyRemote(getContext());
+        return spotify;
+    }
+
+    @PluginMethod
+    public void spotifyBrowse(PluginCall call) {
+        String clientId = call.getString("clientId", "");
+        String parentId = call.getString("parentId");
+        if (clientId == null || clientId.isEmpty()) {
+            call.reject("No Spotify client ID is configured.");
+            return;
+        }
+        if (!SpotifyRemote.installed(getContext())) {
+            call.reject("Spotify isn't installed on this phone.");
+            return;
+        }
+        // App Remote connects (and may show its auth screen), so it has to run on the UI thread.
+        main.post(() -> spotify().browse(clientId, parentId, new SpotifyRemote.ItemsCallback() {
+            @Override
+            public void items(JSArray items) {
+                JSObject result = new JSObject();
+                result.put("items", items);
+                call.resolve(result);
+            }
+
+            @Override
+            public void failed(String message) {
+                call.reject(message);
+            }
+        }));
+    }
+
+    @PluginMethod
+    public void spotifyPlay(PluginCall call) {
+        String clientId = call.getString("clientId", "");
+        String id = call.getString("id", "");
+        if (clientId == null || clientId.isEmpty() || id == null || id.isEmpty()) {
+            call.reject("A Spotify client ID and item are required.");
+            return;
+        }
+        main.post(() -> spotify().play(clientId, id, new SpotifyRemote.DoneCallback() {
+            @Override
+            public void done() {
+                call.resolve();
+            }
+
+            @Override
+            public void failed(String message) {
+                call.reject(message);
+            }
+        }));
     }
 
     // ---- In-app updater ---------------------------------------------------------------
