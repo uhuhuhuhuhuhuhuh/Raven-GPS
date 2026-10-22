@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import '@fontsource-variable/inter';
+import '@fontsource-variable/archivo/wdth.css';
 import '@fontsource-variable/jetbrains-mono';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import App from './App';

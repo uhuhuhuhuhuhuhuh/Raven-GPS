@@ -68,9 +68,9 @@ export function MapView(props: Props) {
         current.addSource('ahead', { type: 'geojson', data: EMPTY });
         current.addSource('cameras', { type: 'geojson', data: EMPTY });
         current.addLayer({ id: 'routes-alt', type: 'line', source: 'routes', filter: ['!', ['get', 'selected']], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#55627a', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 3, 15, 7], 'line-opacity': 0.9 } });
-        current.addLayer({ id: 'routes-casing', type: 'line', source: 'routes', filter: ['get', 'selected'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#0a3a5c', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 7, 15, 13] } });
+        current.addLayer({ id: 'routes-casing', type: 'line', source: 'routes', filter: ['get', 'selected'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#0b2f45', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 7, 15, 13] } });
         current.addLayer({ id: 'routes-main', type: 'line', source: 'routes', filter: ['get', 'selected'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#5ac8fa', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 4, 15, 8] } });
-        current.addLayer({ id: 'ahead-casing', type: 'line', source: 'ahead', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#0a3a5c', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 9, 17, 20] } });
+        current.addLayer({ id: 'ahead-casing', type: 'line', source: 'ahead', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#0b2f45', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 9, 17, 20] } });
         current.addLayer({ id: 'ahead-main', type: 'line', source: 'ahead', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#5ac8fa', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 5, 17, 13] } });
         current.addLayer({
           id: 'cameras',
