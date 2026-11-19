@@ -1,18 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive-icon foreground: the raven mark within the 66dp safe circle (centre 54,54). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FF5A36"
-        android:strokeWidth="3.5"
-        android:pathData="M54,27 A27,27 0 1,1 53.99,27 Z" />
-    <path
-        android:fillColor="#5AC8FA"
-        android:strokeColor="#0B0F17"
-        android:strokeWidth="2"
-        android:strokeLineJoin="round"
-        android:pathData="M54,33 L69,72 L54,63 L39,72 Z" />
+    <group android:scaleX="0.62" android:scaleY="0.62" android:pivotX="54" android:pivotY="54" android:translateY="-2">
+        <path android:fillColor="#F4F6F9" android:pathData="M30,82 C26,66 27,48 40,38 C48,32 58,31 66,35 L92,46 L68,50 C66,58 60,64 52,66 C46,68 42,72 40,82 Z" />
+        <path android:fillColor="#06080B" android:pathData="M66,42 L84,46 L66,48 Z" />
+        <path android:fillColor="#06080B" android:pathData="M54,39.5 A5.5,5.5 0 1,1 53.99,39.5 Z" />
+        <path android:fillColor="#FF5A36" android:pathData="M54,42.8 A2.2,2.2 0 1,1 53.99,42.8 Z" />
+        <path android:fillColor="#00000000" android:strokeColor="#5AC8FA" android:strokeWidth="3.5" android:strokeLineCap="round" android:pathData="M40,82 L40,90 Q40,96 34,96 L22,96" />
+    </group>
 </vector>

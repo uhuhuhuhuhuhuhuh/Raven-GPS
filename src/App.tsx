@@ -1,10 +1,11 @@
 import { Share } from '@capacitor/share';
 import {
   Briefcase, Clock, Download, House, LoaderCircle, LocateFixed, MapPin, Search, Settings as SettingsIcon, Share2, ShieldAlert, ShieldCheck,
-  TriangleAlert, Volume2, VolumeX, X, FastForward, Route as RouteIcon, ExternalLink
+  TriangleAlert, Volume2, VolumeX, X, FastForward, Route as RouteIcon, ExternalLink, ListOrdered, Map as MapIcon, Navigation2
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ConnectorsSheet } from './components/ConnectorsSheet';
+import { Logo } from './components/Logo';
 import { ManeuverIcon } from './components/ManeuverIcon';
 import { MapView, type MapCamera } from './components/MapView';
 import { MediaBar } from './components/MediaBar';
@@ -14,11 +15,12 @@ import type { Connector } from './lib/media';
 import { CameraRepository } from './lib/cameraData';
 import type { Camera, RouteCamera } from './lib/cameras';
 import { distanceText, formatClock, formatDistance, formatDuration, speedValue } from './lib/format';
+import { displayLimit, fetchSpeedLimits, limitAt, type SpeedLimitSpan } from './lib/speedLimits';
 import { reversePlace, searchPlaces, type Place } from './lib/geocode';
 import { watchCompass } from './lib/compass';
 import { boundsOf, haversine, type Bounds, type LonLat } from './lib/geo';
 import { watchLocation } from './lib/location';
-import { RavenNative, isNative } from './lib/native';
+import { RavenNative, isNative, type NavigationCard } from './lib/native';
 import { advance, progress, simulatedFix, startNavigation, type Fix, type NavEvent, type NavState } from './lib/navigation';
 import { loadRecents, loadSaved, rememberPlace, savePlace, type SavedPlaces, type SavedSlot } from './lib/places';
 import { planRoutes, type CameraSource, type OptionKind, type RouteOption } from './lib/planner';
@@ -32,7 +34,7 @@ import { valhallaFetcher, type ProfileId, type Route } from './lib/valhalla';
 import { createVoice } from './lib/voice';
 
 type Mode = 'browse' | 'preview' | 'navigate' | 'arrived';
-type Nav = { option: RouteOption; state: NavState; simulated: boolean; rerouting: boolean };
+type Nav = { option: RouteOption; state: NavState; simulated: boolean; rerouting: boolean; limits: SpeedLimitSpan[] };
 
 const OPTION_TEXT: Record<OptionKind, { title: string; detail: string }> = {
   fastest: { title: 'Fastest', detail: 'Quickest drive with the fewest cameras found' },
@@ -63,6 +65,7 @@ export default function App() {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [destination, setDestination] = useState<Place | null>(null);
   const [options, setOptions] = useState<RouteOption[]>([]);
+  const destinationRef = useRef<Place | null>(null);
   const [preview, setPreview] = useState<Route | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [planning, setPlanning] = useState<{ busy: boolean; message: string; error: string | null }>({ busy: false, message: '', error: null });
@@ -80,6 +83,8 @@ export default function App() {
   const [dataTimestamp, setDataTimestamp] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   const [simBoost, setSimBoost] = useState(1);
+  const [turnList, setTurnList] = useState(false);
+  const [overview, setOverview] = useState(false);
   const media = useMedia();
   const update = useUpdate();
 
@@ -103,6 +108,7 @@ export default function App() {
   positionRef.current = position;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  destinationRef.current = destination;
   const planAbort = useRef<AbortController | null>(null);
 
   useEffect(() => saveSettings(settings), [settings]);
@@ -119,6 +125,7 @@ export default function App() {
       else if (event.type === 'arrived') {
         setMode('arrived');
         void RavenNative.setKeepAwake({ enabled: false }).catch(() => undefined);
+        void RavenNative.navigationStop().catch(() => undefined);
       } else if (event.type === 'offRoute') void rerouteRef.current(option);
     }
   }, [voice]);
@@ -158,7 +165,7 @@ export default function App() {
       if (!fresh || navRef.current !== null && navRef.current.option !== current.option) return;
       const replacement: RouteOption = { ...fresh, kind: option.kind, id: `${option.kind}-reroute-${Date.now()}` };
       const started = startNavigation(replacement.route, { announceStart: true });
-      const next: Nav = { option: replacement, state: started.state, simulated: current.simulated, rerouting: false };
+      const next: Nav = { option: replacement, state: started.state, simulated: current.simulated, rerouting: false, limits: [] };
       navRef.current = next;
       setNav(next);
       handleEvents(started.events, replacement);
@@ -291,7 +298,7 @@ export default function App() {
     if (!selected) return;
     planAbort.current?.abort();
     const started = startNavigation(selected.route, { announceStart: true });
-    const next: Nav = { option: selected, state: started.state, simulated, rerouting: false };
+    const next: Nav = { option: selected, state: started.state, simulated, rerouting: false, limits: [] };
     navRef.current = next;
     setNav(next);
     setMode('navigate');
@@ -299,7 +306,9 @@ export default function App() {
     setAlert(null);
     setPlanning(value => ({ ...value, busy: false }));
     handleEvents(started.events, selected);
+    setOverview(false);
     void RavenNative.setKeepAwake({ enabled: true }).catch(() => undefined);
+    if (!simulated) void RavenNative.navigationStart({ title: 'Starting navigation', text: destinationRef.current?.name ?? '', eta: '' }).catch(() => undefined);
   }, [selected, handleEvents]);
 
   const endDrive = useCallback(() => {
@@ -313,6 +322,7 @@ export default function App() {
     setAlert(null);
     setFollow(true);
     void RavenNative.setKeepAwake({ enabled: false }).catch(() => undefined);
+    void RavenNative.navigationStop().catch(() => undefined);
     void RavenNative.stopSpeaking().catch(() => undefined);
   }, []);
 
@@ -356,12 +366,12 @@ export default function App() {
   // compass out of the browse camera stops it re-easing on every magnetometer sample.
   const followBearing = mode === 'navigate' ? heading : 0;
   const mapFollow: MapCamera | null = useMemo(() => {
-    if (!follow || !livePoint) return null;
+    if (!follow || !livePoint || overview) return null;
     if (mode === 'navigate' && nav) return { center: livePoint, bearing: followBearing, zoom: followZoom(nav.state.speed), pitch: 55 };
     if (mode === 'browse') return { center: livePoint, bearing: 0, zoom: 15, pitch: 0 };
     return null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [follow, mode, livePoint?.[0], livePoint?.[1], followBearing, nav?.state.speed]);
+  }, [follow, mode, livePoint?.[0], livePoint?.[1], followBearing, nav?.state.speed, overview]);
 
   const navProgress = nav ? progress(nav.option.route, settings.cameraAlerts ? nav.option.cameras : [], nav.state) : null;
   const ahead = nav ? sliceLine(nav.option.route.line, nav.state.along) : null;
@@ -369,6 +379,44 @@ export default function App() {
   const routeCameras = mode === 'navigate' && nav ? nav.option.cameras : selected?.cameras ?? [];
   const quickest = options.length ? Math.min(...options.map(option => option.route.time)) : 0;
   const speed = speedValue(nav ? nav.state.speed : position?.speed, settings.units);
+  const limitKph = nav ? limitAt(nav.limits, nav.state.along) : null;
+  const limit = limitKph === null ? null : displayLimit(limitKph, settings.units);
+  const overLimit = limit !== null && speed !== null && speed > limit + (settings.units === 'mi' ? 4 : 7);
+
+  // Posted limits for the route being driven (one request per route; a failure just shows no limit).
+  const limitsFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (mode !== 'navigate' || !nav || limitsFor.current === nav.option.id) return;
+    limitsFor.current = nav.option.id;
+    const controller = new AbortController();
+    const route = nav.option;
+    void fetchSpeedLimits(route.route.line, settings.routingEndpoint, controller.signal)
+      .then(spans => {
+        const current = navRef.current;
+        if (!current || current.option.id !== route.id) return;
+        const next = { ...current, limits: spans };
+        navRef.current = next;
+        setNav(next);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [mode, nav, settings.routingEndpoint]);
+
+  // Keep the lock-screen card current: next turn, distance, ETA.
+  const lastCard = useRef('');
+  useEffect(() => {
+    if (mode !== 'navigate' || !nav || nav.simulated || !navProgress) return;
+    const maneuver = navProgress.maneuver;
+    const card: NavigationCard = {
+      title: maneuver ? `${distanceText(navProgress.distanceToManeuver, settings.units)} · ${maneuver.streetNames[0] ?? maneuver.toward ?? maneuver.instruction}` : 'Navigating',
+      text: `${formatDuration(navProgress.remainingTime)} · ${distanceText(navProgress.remainingDistance, settings.units)}${navProgress.nextCamera ? ` · camera in ${distanceText(navProgress.nextCamera.distance, settings.units)}` : ''}`,
+      eta: `ETA ${formatClock(new Date(Date.now() + navProgress.remainingTime * 1000))}`
+    };
+    const key = `${card.title}|${card.text}|${card.eta}`;
+    if (key === lastCard.current) return;
+    lastCard.current = key;
+    void RavenNative.navigationUpdate(card).catch(() => undefined);
+  }, [mode, nav, navProgress, settings.units]);
 
   const shareEta = useCallback(async () => {
     if (!destination || !navProgress) return;
@@ -397,7 +445,7 @@ export default function App() {
         position={livePoint ? { point: livePoint, heading } : null}
         destination={destination ? [destination.lon, destination.lat] : null}
         follow={mapFollow}
-        fitTo={mode === 'preview' ? fitTo : null}
+        fitTo={mode === 'preview' ? fitTo : mode === 'navigate' && overview && ahead && ahead.length > 1 ? boundsOf(ahead) : null}
         restoreTo={restoreView}
         onRestored={() => setRestoreView(null)}
         initialCenter={initialView.center}
@@ -415,6 +463,7 @@ export default function App() {
       {mode === 'browse' && (
         <>
           <header className="topbar">
+            <span className="brand" aria-hidden><Logo size={30} /></span>
             <button className="search-trigger" onClick={() => setSearchOpen(true)} data-testid="search-open">
               <Search size={20} aria-hidden />
               <span>Where to?</span>
@@ -514,6 +563,20 @@ export default function App() {
               );
             })}
           </ul>
+          {selected && (
+            <details className="turns" open={turnList} onToggle={event => setTurnList((event.target as HTMLDetailsElement).open)}>
+              <summary><ListOrdered size={16} aria-hidden /> {selected.route.maneuvers.length - 1} turns</summary>
+              <ol className="turn-list">
+                {selected.route.maneuvers.map((maneuver, index) => (
+                  <li key={index}>
+                    <span className="turn-icon"><ManeuverIcon type={maneuver.type} size={18} /></span>
+                    <span className="turn-text">{maneuver.instruction}</span>
+                    {maneuver.length > 0 && <span className="turn-length">{distanceText(maneuver.length, settings.units)}</span>}
+                  </li>
+                ))}
+              </ol>
+            </details>
+          )}
           <div className="route-actions">
             <button className="primary big" disabled={!selected} onClick={() => startDrive(false)} data-testid="start">
               <RouteIcon size={20} /> Start{selected ? ` · ${formatDuration(selected.route.time)}` : ''}
@@ -555,7 +618,12 @@ export default function App() {
               <TriangleAlert size={16} /> {alert.hit.camera.label} · {distanceText(alert.distance, settings.units)}
             </div>
           )}
-          {speed !== null && <div className="speed" aria-label="Speed"><b>{speed}</b><small>{settings.units === 'mi' ? 'mph' : 'km/h'}</small></div>}
+          {(speed !== null || limit !== null) && (
+            <div className={`speed-cluster${overLimit ? ' over' : ''}`}>
+              {speed !== null && <div className="speed" aria-label="Speed"><b>{speed}</b><small>{settings.units === 'mi' ? 'mph' : 'km/h'}</small></div>}
+              {limit !== null && <div className="limit" aria-label="Speed limit" data-testid="speed-limit"><small>Limit</small><b>{limit}</b></div>}
+            </div>
+          )}
           {!follow && <button className="fab recenter nav" onClick={() => setFollow(true)} aria-label="Resume following"><LocateFixed size={22} /></button>}
           <div className="nav-bottom">
             <MediaBar compact nowPlaying={media.nowPlaying} preferred={settings.mediaApp} onControl={media.control} onOpenConnectors={() => setSheet('connectors')} />
@@ -572,6 +640,7 @@ export default function App() {
                 {nav.simulated && (
                   <button className={`icon-button${simBoost > 1 ? ' active' : ''}`} onClick={() => setSimBoost(value => (value > 1 ? 1 : 4))} aria-label="Fast forward"><FastForward size={20} /></button>
                 )}
+                <button className={`icon-button${overview ? ' active' : ''}`} onClick={() => { setOverview(value => !value); setFollow(overview); }} aria-label={overview ? 'Back to turn view' : 'Route overview'}>{overview ? <Navigation2 size={20} /> : <MapIcon size={20} />}</button>
                 <button className="icon-button" onClick={shareEta} aria-label="Share ETA"><Share2 size={20} /></button>
                 <button className="icon-button" onClick={() => setSettings({ ...settings, voice: !settings.voice })} aria-label={settings.voice ? 'Mute voice' : 'Unmute voice'}>
                   {settings.voice ? <Volume2 size={20} /> : <VolumeX size={20} />}

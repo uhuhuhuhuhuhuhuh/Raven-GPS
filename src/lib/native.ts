@@ -57,8 +57,15 @@ export interface RavenNativePlugin {
   appInfo(): Promise<{ versionCode: number; versionName: string }>;
   /** Download an APK and hand it to the system installer. */
   downloadAndInstall(options: { url: string }): Promise<{ started: boolean }>;
+  /** Foreground service: keeps location flowing with the screen locked and shows the next turn as a notification. */
+  navigationStart(options: NavigationCard): Promise<void>;
+  navigationUpdate(options: NavigationCard): Promise<void>;
+  navigationStop(): Promise<void>;
   addListener(event: 'nowPlaying', listener: (info: { playing?: NowPlaying }) => void): Promise<PluginListenerHandle>;
 }
+
+/** What the ongoing navigation notification shows. */
+export type NavigationCard = { title: string; text: string; eta: string };
 
 class RavenNativeWeb extends WebPlugin implements RavenNativePlugin {
   private wakeLock: { release(): Promise<void> } | null = null;
@@ -105,6 +112,12 @@ class RavenNativeWeb extends WebPlugin implements RavenNativePlugin {
   async mediaBrowse() {
     return { items: [] };
   }
+
+  async navigationStart(): Promise<void> {}
+
+  async navigationUpdate(): Promise<void> {}
+
+  async navigationStop(): Promise<void> {}
 
   async mediaPlayId(): Promise<void> {}
 

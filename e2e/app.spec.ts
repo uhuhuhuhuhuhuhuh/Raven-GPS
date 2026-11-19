@@ -41,6 +41,9 @@ async function mockServices(page: Page) {
   await page.route('https://uhuhuhuhuhuhuhuh.github.io/Raven/api/v1/osm/tiles/**', route => route.fulfill({
     json: [[4242, 33.749, -84.3829, { man_made: 'surveillance', 'surveillance:type': 'ALPR', manufacturer: 'Flock Safety', direction: '90' }]]
   }));
+  await page.route('https://valhalla1.openstreetmap.de/trace_attributes', route => route.fulfill({
+    json: { units: 'kilometers', edges: [{ speed_limit: 40, begin_shape_index: 0, end_shape_index: 60 }] }
+  }));
   await page.route('https://valhalla1.openstreetmap.de/route', async route => {
     const body = route.request().postDataJSON() as { exclude_locations?: unknown[] };
     await route.fulfill({ json: { trip: body.exclude_locations?.length ? trip(detourShape, 150) : trip(directShape, 120) } });
@@ -63,9 +66,19 @@ test('plans camera-free routes and drives one', async ({ page }) => {
   await expect(panel.getByRole('status')).toHaveCount(0, { timeout: 20_000 });
   await page.screenshot({ path: 'test-results/routes.png' });
 
+  // The turn list shows every manoeuvre of the selected route.
+  await panel.getByRole('group').locator('summary').click();
+  await expect(panel.locator('.turn-list li')).toHaveCount(3);
+  await expect(panel.locator('.turn-list')).toContainText('Turn right onto Edgewood Avenue.');
+
   await panel.getByRole('button', { name: 'Preview drive' }).click();
   await expect(page.getByTestId('nav-banner')).toContainText(/Peachtree Street|Edgewood Avenue/);
   await expect(page.getByText('No cameras ahead')).toBeVisible();
+  // Posted limit from the traced route (40 km/h ≈ 25 mph).
+  await expect(page.getByTestId('speed-limit')).toContainText('25');
+  await page.getByRole('button', { name: 'Route overview' }).click();
+  await expect(page.getByRole('button', { name: 'Back to turn view' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to turn view' }).click();
   await page.screenshot({ path: 'test-results/navigate.png' });
   await expect(page.getByTestId('arrived')).toBeVisible({ timeout: 30_000 });
 });

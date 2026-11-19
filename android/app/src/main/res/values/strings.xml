@@ -4,4 +4,7 @@
     <string name="title_activity_main">Raven GPS</string>
     <string name="package_name">io.github.uhuhuhuhuhuhuhuh.ravengps</string>
     <string name="custom_url_scheme">io.github.uhuhuhuhuhuhuhuh.ravengps</string>
+    <string name="nav_channel">Navigation</string>
+    <string name="nav_channel_description">Next turn and arrival time while a drive is in progress</string>
+    <string name="nav_end">End</string>
 </resources>

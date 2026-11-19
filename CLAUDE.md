@@ -125,6 +125,7 @@ adb shell screencap -p /sdcard/s.png && adb pull /sdcard/s.png
 
 ## Known gaps
 
-- No background location or foreground service: guidance pauses when the screen is locked.
+- The foreground navigation service (NavigationService.java) has only been compiled in CI, not run on a device: check that guidance keeps speaking with the screen locked and that the notification shows the next turn.
+
 - "Less traffic" uses road types, not live traffic; there is no free live-traffic feed.
 - Only cameras mapped in OpenStreetMap can be avoided.

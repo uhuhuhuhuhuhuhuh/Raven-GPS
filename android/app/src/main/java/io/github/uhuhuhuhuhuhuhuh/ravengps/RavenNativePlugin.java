@@ -62,7 +62,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * navigating, and the media connectors (now playing + transport controls for any player
  * through Android media sessions, and launching music apps).
  */
-@CapacitorPlugin(name = "RavenNative")
+@CapacitorPlugin(
+    name = "RavenNative",
+    permissions = {
+        @com.getcapacitor.annotation.Permission(alias = "notifications", strings = { "android.permission.POST_NOTIFICATIONS" })
+    }
+)
 public class RavenNativePlugin extends Plugin {
     private static final int TTS_NONE = 0;
     private static final int TTS_STARTING = 1;
@@ -251,6 +256,39 @@ public class RavenNativePlugin extends Plugin {
             else getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             call.resolve();
         });
+    }
+
+    // ---- Navigation in the background ---------------------------------------------------
+
+    /** Starts the foreground service so location keeps flowing while the screen is locked. */
+    @PluginMethod
+    public void navigationStart(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+            && getContext().checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            // The service still runs without the permission; the user just won't see its card.
+            requestPermissionForAlias("notifications", call, "navigationStartAfterPermission");
+            return;
+        }
+        NavigationService.start(getContext(), call.getString("title", ""), call.getString("text", ""), call.getString("eta", ""));
+        call.resolve();
+    }
+
+    @com.getcapacitor.annotation.PermissionCallback
+    private void navigationStartAfterPermission(PluginCall call) {
+        NavigationService.start(getContext(), call.getString("title", ""), call.getString("text", ""), call.getString("eta", ""));
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void navigationUpdate(PluginCall call) {
+        NavigationService.update(getContext(), call.getString("title", ""), call.getString("text", ""), call.getString("eta", ""));
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void navigationStop(PluginCall call) {
+        NavigationService.stop(getContext());
+        call.resolve();
     }
 
     // ---- Media connectors -------------------------------------------------------------

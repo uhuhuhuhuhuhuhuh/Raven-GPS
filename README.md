@@ -21,8 +21,10 @@ Turn-by-turn navigation for Android that routes around **Flock Safety** devices 
 
   Each option shows its drive time, distance and how many cameras it still passes.
 - **Turn-by-turn guidance** with voice (music ducks while it speaks), lane-style banners,
-  exit numbers, ETA, speed, automatic rerouting when you leave the route, and alerts before
-  any camera that couldn't be avoided.
+  exit numbers, ETA, speed with the posted limit beside it, a turn list, a route overview,
+  automatic rerouting when you leave the route, and alerts before any camera that couldn't
+  be avoided. Guidance keeps running with the screen locked; the next turn and ETA show as
+  a notification.
 - **Music connectors.** A player bar shows what's playing and controls **Spotify, Plexamp,
   Plex, YouTube Music, Apple Music, Amazon Music, Pandora, TIDAL, Deezer, SoundCloud,
   iHeartRadio, TuneIn, Audible and Pocket Casts**, and opens them. It uses Android's media

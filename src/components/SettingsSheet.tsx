@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { DEFAULT_ROUTING_ENDPOINT } from '../lib/valhalla';
 import { DEFAULT_SETTINGS, type Settings } from '../lib/settings';
 import type { UpdateInfo } from '../lib/update';
+import { Logo } from './Logo';
 import { Segmented, Sheet, Toggle } from './Sheet';
 
 type UpdateProps = {
@@ -79,6 +80,7 @@ export function SettingsSheet({ settings, dataTimestamp, update, onChange, onClo
       <button className="row-button subtle" onClick={() => { setEndpoint(DEFAULT_SETTINGS.routingEndpoint); onChange({ ...DEFAULT_SETTINGS, mediaApp: settings.mediaApp }); }}>Reset all settings</button>
 
       <h3>About</h3>
+      <div className="about-brand"><Logo size={44} /><div><strong>Raven GPS</strong><small>Routes around the cameras that read your plate.</small></div></div>
       <p className="note">
         Camera locations: OpenStreetMap contributors (ODbL), via <a href="https://uhuhuhuhuhuhuhuh.github.io/Raven/" target="_blank" rel="noreferrer">Raven</a>
         {dataTimestamp ? `, data as of ${new Date(dataTimestamp).toLocaleDateString()}` : ''}. Routing: Valhalla on FOSSGIS servers. Search: Photon by komoot. Map: OpenFreeMap.

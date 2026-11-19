@@ -1,5 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
-  <rect width="108" height="108" rx="24" fill="#0b0f17"/>
-  <circle cx="54" cy="54" r="27" fill="none" stroke="#ff5a36" stroke-width="3.5"/>
-  <path d="M54 33 L69 72 L54 63 L39 72 Z" fill="#5ac8fa" stroke="#0b0f17" stroke-width="2" stroke-linejoin="round"/>
+  <!-- Raven GPS mark: a raven's head facing the way you're going. The beak is the
+       navigation arrow; the eye is the plate reader it watches for. One colour on ink. -->
+  <rect width="108" height="108" rx="22" fill="#06080b"/>
+  <path fill="#f4f6f9" d="M30 82 C26 66 27 48 40 38 C48 32 58 31 66 35 L92 46 L68 50 C66 58 60 64 52 66 C46 68 42 72 40 82 Z"/>
+  <path fill="#06080b" d="M66 42 L84 46 L66 48 Z"/>
+  <circle cx="54" cy="45" r="5.5" fill="#06080b"/>
+  <circle cx="54" cy="45" r="2.2" fill="#ff5a36"/>
+  <path fill="none" stroke="#5ac8fa" stroke-width="3.5" stroke-linecap="round" d="M40 82 L40 90 Q40 96 34 96 L22 96"/>
 </svg>
